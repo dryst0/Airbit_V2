@@ -45,20 +45,20 @@ namespace airbit {
     export function baroStart() {
         // Soft reset
         pins.i2cWriteNumber(
-            BARO_ADDRESS,
-            BARO_CMD_SOFT_RESET,
+            BAROMETER_ADDRESS,
+            BAROMETER_CMD_SOFT_RESET,
             NumberFormat.UInt16BE,
             true
         )
         basic.pause(10)
         pins.i2cWriteNumber(
-            BARO_ADDRESS,
-            BARO_CMD_READ_ID,
+            BAROMETER_ADDRESS,
+            BAROMETER_CMD_READ_ID,
             NumberFormat.UInt16BE,
             true
         )
-        BARO_return = pins.i2cReadNumber(BARO_ADDRESS, NumberFormat.UInt16LE, true)
-        if (!BARO_return) {
+        barometerReturnId = pins.i2cReadNumber(BAROMETER_ADDRESS, NumberFormat.UInt16LE, true)
+        if (!barometerReturnId) {
             basic.showString("No Baro", 50)
             return
         }
@@ -72,20 +72,20 @@ namespace airbit {
     //% block="Reset Stabilization"
     //% group='Control'
     export function resetPidState() {
-        rollDiff = 0
-        pitchDiff = 0
-        lastRollDiff = 0
-        lastPitchDiff = 0
-        lastYawDiff = 0
-        rollIdiff = 0
-        pitchIdiff = 0
-        yawIdiff = 0
-        yawDiff = 0
-        yawDdiff = 0
-        pitchDdiff = 0
-        rollDdiff = 0
-        imuYaw = 0
-        gyroZdelta = 0
+        rollError = 0
+        pitchError = 0
+        lastRollError = 0
+        lastPitchError = 0
+        lastYawError = 0
+        rollIntegral = 0
+        pitchIntegral = 0
+        yawIntegral = 0
+        yawError = 0
+        yawDerivative = 0
+        pitchDerivative = 0
+        rollDerivative = 0
+        measuredYaw = 0
+        gyroscopeDeltaZ = 0
         yaw = 0
         rollCorrection = 0
         pitchCorrection = 0
@@ -98,7 +98,7 @@ namespace airbit {
     //% group='Battery management'
     export function batteryLevel() {
         batteryCalculation()
-        return Math.map(batterymVoltSmooth, BATTERY_VOLTAGE_MIN, BATTERY_VOLTAGE_MAX, 0, 100)
+        return Math.map(batteryMillivoltsSmoothed, BATTERY_VOLTAGE_MIN, BATTERY_VOLTAGE_MAX, 0, 100)
     }
 
 
@@ -109,7 +109,7 @@ namespace airbit {
     //% block="Battery Calculation"
     //% group='Battery management'
     export function batteryCalculation() {
-        batterymVoltSmooth = Math.round(pins.analogReadPin(AnalogPin.P0) * BATTERY_FACTOR * BATTERY_SMOOTHING_NEW + batterymVoltSmooth * BATTERY_SMOOTHING_OLD)
+        batteryMillivoltsSmoothed = Math.round(pins.analogReadPin(AnalogPin.P0) * BATTERY_FACTOR * BATTERY_SMOOTHING_NEW + batteryMillivoltsSmoothed * BATTERY_SMOOTHING_OLD)
 
     }
 
@@ -131,12 +131,12 @@ namespace airbit {
     //% group='System'
     export function readMotorRegister(num: number) {
         pins.i2cWriteNumber(
-            PCA_ADDRESS,
+            MOTOR_CONTROLLER_ADDRESS,
             num,
             NumberFormat.UInt8BE,
             true
         )
-        return pins.i2cReadNumber(PCA_ADDRESS, NumberFormat.UInt8BE, false)
+        return pins.i2cReadNumber(MOTOR_CONTROLLER_ADDRESS, NumberFormat.UInt8BE, false)
     }
 
 
@@ -152,15 +152,15 @@ namespace airbit {
     export function calculateAngles() {
         looptime = input.runningTime() - oldTime
         oldTime = input.runningTime()
-        accPitch = (-RAD_TO_DEG * Math.atan2(accY, accZ)) - accPitchOffset
-        accRoll = (-RAD_TO_DEG * Math.atan2(accX, accZ)) - accRollOffset
+        accelerometerPitch = (-RAD_TO_DEG * Math.atan2(accelerometerY, accelerometerZ)) - accelerometerPitchOffset
+        accelerometerRoll = (-RAD_TO_DEG * Math.atan2(accelerometerX, accelerometerZ)) - accelerometerRollOffset
         // Degrees away from desired angle
-        gyroXdelta = (gyroX - gyroXcalibration) * looptime * -GYRO_SCALE_FACTOR
-        gyroYdelta = (gyroY - gyroYcalibration) * looptime * GYRO_SCALE_FACTOR
-        gyroZdelta = (gyroZ - gyroZcalibration) * looptime * -GYRO_SCALE_FACTOR
-        imuRoll = (gyroYdelta + imuRoll) * COMPLEMENTARY_GYRO_WEIGHT + accRoll * COMPLEMENTARY_ACC_WEIGHT
-        imuPitch = (gyroXdelta + imuPitch) * COMPLEMENTARY_GYRO_WEIGHT + accPitch * COMPLEMENTARY_ACC_WEIGHT
-        imuYaw = gyroZdelta + imuYaw
+        gyroscopeDeltaX = (gyroscopeX - gyroscopeCalibrationX) * looptime * -GYRO_SCALE_FACTOR
+        gyroscopeDeltaY = (gyroscopeY - gyroscopeCalibrationY) * looptime * GYRO_SCALE_FACTOR
+        gyroscopeDeltaZ = (gyroscopeZ - gyroscopeCalibrationZ) * looptime * -GYRO_SCALE_FACTOR
+        measuredRoll = (gyroscopeDeltaY + measuredRoll) * COMPLEMENTARY_GYRO_WEIGHT + accelerometerRoll * COMPLEMENTARY_ACC_WEIGHT
+        measuredPitch = (gyroscopeDeltaX + measuredPitch) * COMPLEMENTARY_GYRO_WEIGHT + accelerometerPitch * COMPLEMENTARY_ACC_WEIGHT
+        measuredYaw = gyroscopeDeltaZ + measuredYaw
     }
 
     // Animate a dot spinning in a circle on the LED screen (used in motor test)
@@ -190,26 +190,26 @@ namespace airbit {
 
     export function setMotorSpeeds(m0: number, m1: number, m2: number, m3: number) {
         pins.i2cWriteNumber(
-            PCA_ADDRESS,
-            PCA_PWM0 << 8 | m3,
+            MOTOR_CONTROLLER_ADDRESS,
+            MOTOR_CONTROLLER_PWM0 << 8 | m3,
             NumberFormat.UInt16BE,
             false
         )
         pins.i2cWriteNumber(
-            PCA_ADDRESS,
-            PCA_PWM1 << 8 | m2,
+            MOTOR_CONTROLLER_ADDRESS,
+            MOTOR_CONTROLLER_PWM1 << 8 | m2,
             NumberFormat.UInt16BE,
             false
         )
         pins.i2cWriteNumber(
-            PCA_ADDRESS,
-            PCA_PWM2 << 8 | m1,
+            MOTOR_CONTROLLER_ADDRESS,
+            MOTOR_CONTROLLER_PWM2 << 8 | m1,
             NumberFormat.UInt16BE,
             false
         )
         pins.i2cWriteNumber(
-            PCA_ADDRESS,
-            PCA_PWM3 << 8 | m0,
+            MOTOR_CONTROLLER_ADDRESS,
+            MOTOR_CONTROLLER_PWM3 << 8 | m0,
             NumberFormat.UInt16BE,
             false
         )
@@ -223,9 +223,9 @@ namespace airbit {
     //% group='Control'
 
     // Helper: write a single value to a gyroscope register over I2C
-    function writeImuRegister(register: number, value: number) {
+    function writeGyroscopeRegister(register: number, value: number) {
         pins.i2cWriteNumber(
-            IMU_ADDRESS,
+            GYROSCOPE_ADDRESS,
             register << 8 | value,
             NumberFormat.UInt16BE,
             false
@@ -234,24 +234,24 @@ namespace airbit {
 
     export function startImu() {
         // Full reset chip (H_RESET, internal 20MHz clock)
-        writeImuRegister(IMU_PWR_MGMT_1, 0x80)
+        writeGyroscopeRegister(GYROSCOPE_PWR_MGMT_1, 0x80)
         basic.pause(500)
         // Read WHO_AM_I register to verify chip is present
-        pins.i2cWriteNumber(IMU_ADDRESS, IMU_WHO_AM_I, NumberFormat.UInt8BE, true)
-        gyroReturnId = pins.i2cReadNumber(IMU_ADDRESS, NumberFormat.Int16BE, false)
+        pins.i2cWriteNumber(GYROSCOPE_ADDRESS, GYROSCOPE_WHO_AM_I, NumberFormat.UInt8BE, true)
+        gyroscopeReturnId = pins.i2cReadNumber(GYROSCOPE_ADDRESS, NumberFormat.Int16BE, false)
         basic.clearScreen()
-        if (!(gyroReturnId >> 8 > 0)) {
+        if (!(gyroscopeReturnId >> 8 > 0)) {
             basic.showString("NG", 50)
             gyroExists = false
             return
         }
         basic.showString("G")
         gyroExists = true
-        writeImuRegister(IMU_PWR_MGMT_1, 0x01)           // Set clock to internal PLL
-        writeImuRegister(IMU_SIGNAL_PATH_RESET, 0x07)     // Reset signal paths
-        writeImuRegister(IMU_USER_CTRL, 0x00)             // Disable FIFO
-        writeImuRegister(IMU_REG_CONFIG, 0)               // Gyro filter: 250 Hz
-        writeImuRegister(IMU_ACCEL_CONFIG_2, 5)           // Acc filter: 10.2 Hz
+        writeGyroscopeRegister(GYROSCOPE_PWR_MGMT_1, 0x01)           // Set clock to internal PLL
+        writeGyroscopeRegister(GYROSCOPE_SIGNAL_PATH_RESET, 0x07)     // Reset signal paths
+        writeGyroscopeRegister(GYROSCOPE_USER_CTRL, 0x00)             // Disable FIFO
+        writeGyroscopeRegister(GYROSCOPE_REG_CONFIG, 0)               // Gyro filter: 250 Hz
+        writeGyroscopeRegister(GYROSCOPE_ACCEL_CONFIG_2, 5)           // Acc filter: 10.2 Hz
     }
 
 
@@ -262,7 +262,7 @@ namespace airbit {
     //% group='System'
     export function writeMotorRegister(register: number, value: number) {
         pins.i2cWriteNumber(
-            PCA_ADDRESS,
+            MOTOR_CONTROLLER_ADDRESS,
             register << 8 | value,
             NumberFormat.UInt16BE,
             false
@@ -271,29 +271,29 @@ namespace airbit {
 
 
     // Read raw rotation speed (gyro) and acceleration (acc) data from the sensor.
-    // This gives us 6 numbers: gyroX/Y/Z and accX/Y/Z.
+    // This gives us 6 numbers: gyroscopeX/Y/Z and accelerometerX/Y/Z.
     //% blockID=airbit_read_imu
     //% block="Read Gyroscope"
     //% group='Control'
     export function readImuSensors() {
         pins.i2cWriteNumber(
-            IMU_ADDRESS,
-            IMU_REG_GYRO_XOUT_H,
+            GYROSCOPE_ADDRESS,
+            GYROSCOPE_REG_GYRO_XOUT_H,
             NumberFormat.Int8LE,
             true
         )
-        gyroX = pins.i2cReadNumber(IMU_ADDRESS, NumberFormat.Int16BE, true)
-        gyroY = pins.i2cReadNumber(IMU_ADDRESS, NumberFormat.Int16BE, true)
-        gyroZ = pins.i2cReadNumber(IMU_ADDRESS, NumberFormat.Int16BE, false)
+        gyroscopeX = pins.i2cReadNumber(GYROSCOPE_ADDRESS, NumberFormat.Int16BE, true)
+        gyroscopeY = pins.i2cReadNumber(GYROSCOPE_ADDRESS, NumberFormat.Int16BE, true)
+        gyroscopeZ = pins.i2cReadNumber(GYROSCOPE_ADDRESS, NumberFormat.Int16BE, false)
         pins.i2cWriteNumber(
-            IMU_ADDRESS,
-            IMU_REG_ACCEL_XOUT_H,
+            GYROSCOPE_ADDRESS,
+            GYROSCOPE_REG_ACCEL_XOUT_H,
             NumberFormat.Int8LE,
             true
         )
-        accX = pins.i2cReadNumber(IMU_ADDRESS, NumberFormat.Int16BE, true)
-        accY = pins.i2cReadNumber(IMU_ADDRESS, NumberFormat.Int16BE, true)
-        accZ = pins.i2cReadNumber(IMU_ADDRESS, NumberFormat.Int16BE, false)
+        accelerometerX = pins.i2cReadNumber(GYROSCOPE_ADDRESS, NumberFormat.Int16BE, true)
+        accelerometerY = pins.i2cReadNumber(GYROSCOPE_ADDRESS, NumberFormat.Int16BE, true)
+        accelerometerZ = pins.i2cReadNumber(GYROSCOPE_ADDRESS, NumberFormat.Int16BE, false)
     }
 
 
@@ -304,27 +304,27 @@ namespace airbit {
     //% block="Start Motors"
     //% group='Control'
     export function startMotorController() {
-        writeMotorRegister(PCA_REG_MODE1, PCA_RESET)
-        writeMotorRegister(PCA_REG_MODE2, PCA_MODE2_CONFIG)
-        writeMotorRegister(PCA_REG_LEDOUT, PCA_LEDOUT_INDIVIDUAL)
+        writeMotorRegister(MOTOR_CONTROLLER_REG_MODE1, MOTOR_CONTROLLER_RESET)
+        writeMotorRegister(MOTOR_CONTROLLER_REG_MODE2, MOTOR_CONTROLLER_MODE2_CONFIG)
+        writeMotorRegister(MOTOR_CONTROLLER_REG_LEDOUT, MOTOR_CONTROLLER_LEDOUT_INDIVIDUAL)
 
         setMotorSpeeds(0, 0, 0, 0)     // Zero out motor speed
         // Self test to see if data reg can be read.
         pins.i2cWriteNumber(
-            PCA_ADDRESS,
-            PCA_REG_MODE2,
+            MOTOR_CONTROLLER_ADDRESS,
+            MOTOR_CONTROLLER_REG_MODE2,
             NumberFormat.UInt8BE,
             true
         )
-        mcReturnId = pins.i2cReadNumber(PCA_ADDRESS, NumberFormat.UInt8BE, false)
+        motorControllerReturnId = pins.i2cReadNumber(MOTOR_CONTROLLER_ADDRESS, NumberFormat.UInt8BE, false)
         basic.clearScreen()
-        if (!mcReturnId) {
+        if (!motorControllerReturnId) {
             basic.showString("No PCA!", 50)
-            mcExists = false
+            motorControllerExists = false
             return
         }
         basic.showString("M")
-        mcExists = true
+        motorControllerExists = true
     }
 
 
@@ -337,24 +337,24 @@ namespace airbit {
     //% block="Calibrate Gyroscope"
     //% group='Control'
     export function calibrateGyro() {
-        gyroXcalibration = 0
-        gyroYcalibration = 0
-        gyroZcalibration = 0
+        gyroscopeCalibrationX = 0
+        gyroscopeCalibrationY = 0
+        gyroscopeCalibrationZ = 0
         basic.showString("C")
         for (let index = 0; index < GYRO_CALIBRATION_SAMPLES; index++) {
             readImuSensors()
-            gyroXcalibration += gyroX
-            gyroYcalibration += gyroY
-            gyroZcalibration += gyroZ
+            gyroscopeCalibrationX += gyroscopeX
+            gyroscopeCalibrationY += gyroscopeY
+            gyroscopeCalibrationZ += gyroscopeZ
             basic.pause(5)
         }
-        gyroXcalibration = gyroXcalibration / GYRO_CALIBRATION_SAMPLES
-        gyroYcalibration = gyroYcalibration / GYRO_CALIBRATION_SAMPLES
-        gyroZcalibration = gyroZcalibration / GYRO_CALIBRATION_SAMPLES
-        accPitch = -RAD_TO_DEG * Math.atan2(accY, accZ)
-        accRoll = -RAD_TO_DEG * Math.atan2(accX, accZ)
-        accPitchOffset = accPitch
-        accRollOffset = accRoll
+        gyroscopeCalibrationX = gyroscopeCalibrationX / GYRO_CALIBRATION_SAMPLES
+        gyroscopeCalibrationY = gyroscopeCalibrationY / GYRO_CALIBRATION_SAMPLES
+        gyroscopeCalibrationZ = gyroscopeCalibrationZ / GYRO_CALIBRATION_SAMPLES
+        accelerometerPitch = -RAD_TO_DEG * Math.atan2(accelerometerY, accelerometerZ)
+        accelerometerRoll = -RAD_TO_DEG * Math.atan2(accelerometerX, accelerometerZ)
+        accelerometerPitchOffset = accelerometerPitch
+        accelerometerRollOffset = accelerometerRoll
 
         basic.showIcon(IconNames.Yes)
     }
@@ -365,7 +365,7 @@ namespace airbit {
     // PID STABILIZATION — the brain of the drone!
     //
     // This function compares WHERE the pilot wants the drone to be (roll, pitch, yaw)
-    // with WHERE the drone actually is (imuRoll, imuPitch, imuYaw).
+    // with WHERE the drone actually is (measuredRoll, measuredPitch, measuredYaw).
     // The difference is the "error". PID calculates how to correct it:
     //
     //   P (Proportional): correct based on how far off we are RIGHT NOW
@@ -385,39 +385,39 @@ namespace airbit {
     //% group='Control'
     export function stabilize() {
         // Step 1: Calculate the error (difference between desired and actual angle)
-        rollDiff = roll - imuRoll
-        pitchDiff = pitch - imuPitch
-        yawDiff = yaw - imuYaw
+        rollError = roll - measuredRoll
+        pitchError = pitch - measuredPitch
+        yawError = yaw - measuredYaw
 
         // Step 2: D (Derivative) — how fast is the error changing?
-        rollDdiff = rollDiff - lastRollDiff
-        pitchDdiff = pitchDiff - lastPitchDiff
-        yawDdiff = yawDiff - lastYawDiff
+        rollDerivative = rollError - lastRollError
+        pitchDerivative = pitchError - lastPitchError
+        yawDerivative = yawError - lastYawError
 
         // Remember this error for next time (needed to calculate derivative)
-        lastRollDiff = rollDiff
-        lastPitchDiff = pitchDiff
-        lastYawDiff = yawDiff
+        lastRollError = rollError
+        lastPitchError = pitchError
+        lastYawError = yawError
 
         // Step 3: I (Integral) — accumulate small persistent errors over time.
         // Only active when flying (throttle high enough) and error is small.
         if (throttle > INTEGRAL_THROTTLE_THRESHOLD) {
-            if (rollDiff > -INTEGRAL_RANGE && rollDiff < INTEGRAL_RANGE) {
-                rollIdiff += rollDiff
+            if (rollError > -INTEGRAL_RANGE && rollError < INTEGRAL_RANGE) {
+                rollIntegral += rollError
             }
-            if (pitchDiff > -INTEGRAL_RANGE && pitchDiff < INTEGRAL_RANGE) {
-                pitchIdiff += pitchDiff
+            if (pitchError > -INTEGRAL_RANGE && pitchError < INTEGRAL_RANGE) {
+                pitchIntegral += pitchError
             }
         }
 
         // Limit the integral correction so it doesn't overcorrect
-        let rollIcorrection = Math.constrain(rollIdiff * rollPitchI, -INTEGRAL_LIMIT, INTEGRAL_LIMIT)
-        let pitchIcorrection = Math.constrain(pitchIdiff * rollPitchI, -INTEGRAL_LIMIT, INTEGRAL_LIMIT)
+        let rollIcorrection = Math.constrain(rollIntegral * rollPitchI, -INTEGRAL_LIMIT, INTEGRAL_LIMIT)
+        let pitchIcorrection = Math.constrain(pitchIntegral * rollPitchI, -INTEGRAL_LIMIT, INTEGRAL_LIMIT)
 
         // Step 4: Combine P + I + D into a total correction for each axis
-        rollCorrection = rollDiff * rollPitchP + rollIcorrection + rollDdiff * rollPitchD
-        pitchCorrection = pitchDiff * rollPitchP + pitchIcorrection + pitchDdiff * rollPitchD
-        yawCorrection = yawDiff * yawP + yawDdiff * yawD
+        rollCorrection = rollError * rollPitchP + rollIcorrection + rollDerivative * rollPitchD
+        pitchCorrection = pitchError * rollPitchP + pitchIcorrection + pitchDerivative * rollPitchD
+        yawCorrection = yawError * yawP + yawDerivative * yawD
         yawCorrection = Math.constrain(yawCorrection, -YAW_CORRECTION_LIMIT, YAW_CORRECTION_LIMIT)
 
         // Step 5: Convert throttle percentage (0-100) to motor range (0-255)
@@ -441,12 +441,12 @@ namespace airbit {
     // Read the current operating mode of the motor controller chip
     export function readMotorControllerMode() {
         pins.i2cWriteNumber(
-            PCA_ADDRESS,
-            PCA_REG_MODE1,
+            MOTOR_CONTROLLER_ADDRESS,
+            MOTOR_CONTROLLER_REG_MODE1,
             NumberFormat.UInt8BE,
             true
         )
-        return pins.i2cReadNumber(PCA_ADDRESS, NumberFormat.UInt8BE, false)
+        return pins.i2cReadNumber(MOTOR_CONTROLLER_ADDRESS, NumberFormat.UInt8BE, false)
     }
 
 
@@ -454,19 +454,19 @@ namespace airbit {
     // CONSTANTS — settings that never change
     // ========================================================================
 
-    // --- IMU (Gyro/Accelerometer) Register Addresses ---
+    // --- Gyroscope/Accelerometer Register Addresses ---
     // These are "mailbox numbers" inside the gyroscope chip
-    const IMU_ADDRESS = 104
-    const IMU_REG_CONFIG = 1
-    const IMU_PWR_MGMT_1 = 107
-    const IMU_WHO_AM_I = 117
-    const IMU_SIGNAL_PATH_RESET = 105
-    const IMU_USER_CTRL = 106
-    const IMU_ACCEL_CONFIG_2 = 29
-    const IMU_REG_GYRO_XOUT_H = 67
-    const IMU_REG_ACCEL_XOUT_H = 59
+    const GYROSCOPE_ADDRESS = 104
+    const GYROSCOPE_REG_CONFIG = 1
+    const GYROSCOPE_PWR_MGMT_1 = 107
+    const GYROSCOPE_WHO_AM_I = 117
+    const GYROSCOPE_SIGNAL_PATH_RESET = 105
+    const GYROSCOPE_USER_CTRL = 106
+    const GYROSCOPE_ACCEL_CONFIG_2 = 29
+    const GYROSCOPE_REG_GYRO_XOUT_H = 67
+    const GYROSCOPE_REG_ACCEL_XOUT_H = 59
 
-    // --- IMU Sensor Fusion Constants ---
+    // --- Gyroscope Sensor Fusion Constants ---
     // Used by the complementary filter that blends gyro + accelerometer
     const RAD_TO_DEG = 57.295
     const GYRO_SCALE_FACTOR = 0.00000762939
@@ -476,22 +476,22 @@ namespace airbit {
 
     // --- Motor Controller (PCA9685) Register Addresses ---
     // These are "mailbox numbers" inside the motor controller chip
-    const PCA_ADDRESS = 98
-    const PCA_REG_MODE1 = 0
-    const PCA_REG_MODE2 = 1
-    const PCA_REG_LEDOUT = 8
-    const PCA_PWM0 = 2
-    const PCA_PWM1 = 3
-    const PCA_PWM2 = 4
-    const PCA_PWM3 = 5
-    const PCA_RESET = 128
-    const PCA_LEDOUT_INDIVIDUAL = 170
-    const PCA_MODE2_CONFIG = 5  // Non-inverted, Totem pole
+    const MOTOR_CONTROLLER_ADDRESS = 98
+    const MOTOR_CONTROLLER_REG_MODE1 = 0
+    const MOTOR_CONTROLLER_REG_MODE2 = 1
+    const MOTOR_CONTROLLER_REG_LEDOUT = 8
+    const MOTOR_CONTROLLER_PWM0 = 2
+    const MOTOR_CONTROLLER_PWM1 = 3
+    const MOTOR_CONTROLLER_PWM2 = 4
+    const MOTOR_CONTROLLER_PWM3 = 5
+    const MOTOR_CONTROLLER_RESET = 128
+    const MOTOR_CONTROLLER_LEDOUT_INDIVIDUAL = 170
+    const MOTOR_CONTROLLER_MODE2_CONFIG = 5  // Non-inverted, Totem pole
 
     // --- Barometer Register Addresses ---
-    const BARO_ADDRESS = 99
-    const BARO_CMD_SOFT_RESET = 32861
-    const BARO_CMD_READ_ID = 61384
+    const BAROMETER_ADDRESS = 99
+    const BAROMETER_CMD_SOFT_RESET = 32861
+    const BAROMETER_CMD_READ_ID = 61384
 
     // --- Battery Constants ---
     const BATTERY_FACTOR = 5.94   // Converts analog pin reading to millivolts
@@ -511,26 +511,26 @@ namespace airbit {
     // VARIABLES — values that change while the drone is running
     // ========================================================================
 
-    // --- IMU Sensor State ---
-    let gyroReturnId = 0
-    let mcReturnId = 0
-    let BARO_return = 0
-    let gyroX = 0
-    let gyroY = 0
-    let gyroZ = 0
-    let gyroXdelta = 0
-    let gyroYdelta = 0
-    let gyroZdelta = 0
-    let gyroXcalibration = 0
-    let gyroYcalibration = 0
-    let gyroZcalibration = 0
-    let accX = 0
-    let accY = 0
-    let accZ = 0
-    let accPitch = 0
-    let accRoll = 0
-    let accPitchOffset = 0
-    let accRollOffset = 0
+    // --- Gyroscope Sensor State ---
+    let gyroscopeReturnId = 0
+    let motorControllerReturnId = 0
+    let barometerReturnId = 0
+    let gyroscopeX = 0
+    let gyroscopeY = 0
+    let gyroscopeZ = 0
+    let gyroscopeDeltaX = 0
+    let gyroscopeDeltaY = 0
+    let gyroscopeDeltaZ = 0
+    let gyroscopeCalibrationX = 0
+    let gyroscopeCalibrationY = 0
+    let gyroscopeCalibrationZ = 0
+    let accelerometerX = 0
+    let accelerometerY = 0
+    let accelerometerZ = 0
+    let accelerometerPitch = 0
+    let accelerometerRoll = 0
+    let accelerometerPitchOffset = 0
+    let accelerometerRollOffset = 0
     let looptime = 0
     let oldTime = 0
 
@@ -540,18 +540,18 @@ namespace airbit {
     let rollCorrection = 0
     let pitchCorrection = 0
     let yawCorrection = 0
-    let rollDiff = 0
-    let pitchDiff = 0
-    let yawDiff = 0
-    let lastRollDiff = 0
-    let lastPitchDiff = 0
-    let lastYawDiff = 0
-    let rollDdiff = 0
-    let pitchDdiff = 0
-    let yawDdiff = 0
-    let rollIdiff = 0
-    let pitchIdiff = 0
-    let yawIdiff = 0
+    let rollError = 0
+    let pitchError = 0
+    let yawError = 0
+    let lastRollError = 0
+    let lastPitchError = 0
+    let lastYawError = 0
+    let rollDerivative = 0
+    let pitchDerivative = 0
+    let yawDerivative = 0
+    let rollIntegral = 0
+    let pitchIntegral = 0
+    let yawIntegral = 0
 
 
 

@@ -34,16 +34,16 @@ function testGroup(name: string) {
 }
 
 // --- PID Stabilization Tests ---
-// stabilize() reads these main.ts globals: roll, pitch, yaw, imuRoll, imuPitch, imuYaw,
+// stabilize() reads these main.ts globals: roll, pitch, yaw, measuredRoll, measuredPitch, measuredYaw,
 // throttle, rollPitchP, rollPitchI, rollPitchD, yawP, yawD
 // stabilize() writes these main.ts globals: motorA, motorB, motorC, motorD
 
 testGroup("stabilize: zero error produces equal motor speeds")
 
 airbit.resetPidState()
-imuRoll = 0
-imuPitch = 0
-imuYaw = 0
+measuredRoll = 0
+measuredPitch = 0
+measuredYaw = 0
 roll = 0
 pitch = 0
 yaw = 0
@@ -65,9 +65,9 @@ assertEqual(motorD, 153, "Zero error: motorD should equal scaled throttle")
 testGroup("stabilize: roll error produces differential motor speeds")
 
 airbit.resetPidState()
-imuRoll = 5
-imuPitch = 0
-imuYaw = 0
+measuredRoll = 5
+measuredPitch = 0
+measuredYaw = 0
 roll = 0
 pitch = 0
 yaw = 0
@@ -80,7 +80,7 @@ yawD = 70
 
 airbit.stabilize()
 
-// rollDiff = 0 - 5 = -5
+// rollError = 0 - 5 = -5
 // rollCorrection = -5*0.9 + 0 + -5*15 = -4.5 - 75 = -79.5
 // motorA = round(153 + (-79.5) + 0 + 0) = 74
 // motorC = round(153 - (-79.5) + 0 + 0) = 233
@@ -90,9 +90,9 @@ assertTrue(motorB < motorD, "Roll right tilt: motorB (left) should be less than 
 testGroup("stabilize: motor speeds clamped to 0-255")
 
 airbit.resetPidState()
-imuRoll = 15
-imuPitch = 15
-imuYaw = 0
+measuredRoll = 15
+measuredPitch = 15
+measuredYaw = 0
 roll = -15
 pitch = -15
 yaw = 0
@@ -119,9 +119,9 @@ assertTrue(motorD <= 255, "Motor D clamped: not over 255")
 testGroup("batteryLevel: maps voltage to percentage")
 
 // batteryLevel() calls batteryCalculation() first (reads analog pin, applies smoothing).
-// On the simulator, analogReadPin returns 0, so batterymVoltSmooth converges toward 0.
-// We can set batterymVoltSmooth directly and test the mapping by calling batteryLevel().
-// Note: batteryLevel() calls batteryCalculation() which will modify batterymVoltSmooth.
+// On the simulator, analogReadPin returns 0, so batteryMillivoltsSmoothed converges toward 0.
+// We can set batteryMillivoltsSmoothed directly and test the mapping by calling batteryLevel().
+// Note: batteryLevel() calls batteryCalculation() which will modify batteryMillivoltsSmoothed.
 // So we test the math directly: Math.map(voltage, 3400, 4200, 0, 100)
 // These values match BATTERY_VOLTAGE_MIN (3400) and BATTERY_VOLTAGE_MAX (4200) in custom.ts
 
@@ -135,13 +135,13 @@ let expectedMid = Math.map(3800, 3400, 4200, 0, 100)
 assertEqual(expectedMid, 50, "Battery mapping: 3800mV should be 50%")
 
 // --- resetPidState Tests ---
-// resetPidState() resets PID accumulators. We can verify it resets imuYaw (a main.ts global).
+// resetPidState() resets PID accumulators. We can verify it resets measuredYaw (a main.ts global).
 
-testGroup("resetPidState: resets imuYaw to zero")
+testGroup("resetPidState: resets measuredYaw to zero")
 
-imuYaw = 45
+measuredYaw = 45
 airbit.resetPidState()
-assertEqual(imuYaw, 0, "resetPidState should reset imuYaw to 0")
+assertEqual(measuredYaw, 0, "resetPidState should reset measuredYaw to 0")
 
 // --- All Tests Passed ---
 

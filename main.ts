@@ -58,8 +58,8 @@ const NORMAL_BATTERY_VOLTAGE = 3450
 const CHARGING_THRESHOLD = 780
 const CHARGING_COMPLETE_THRESHOLD = 950
 
-// --- Expo ---
-// Expo makes the joystick less sensitive near the center for smoother control
+// --- Exponential Curve ---
+// The exponential curve makes the joystick less sensitive near the center for smoother control
 const EXPO_BASE = 45
 
 // --- Display ---
@@ -134,7 +134,7 @@ function showMotorLeds () {
     led.plotBrightness(0, 0, motorB)
     led.plotBrightness(4, 4, motorC)
     led.plotBrightness(4, 0, motorD)
-    led.plot(Math.map(imuRoll, -ANGLE_LIMIT, ANGLE_LIMIT, 0, 4), Math.map(imuPitch, -ANGLE_LIMIT, ANGLE_LIMIT, 4, 0))
+    led.plot(Math.map(measuredRoll, -ANGLE_LIMIT, ANGLE_LIMIT, 0, 4), Math.map(measuredPitch, -ANGLE_LIMIT, ANGLE_LIMIT, 4, 0))
 }
 // Pick what to show on the LED screen — use buttons A and B to switch modes
 function screen () {
@@ -154,14 +154,14 @@ function screen () {
 }
 // Safety check: if the drone has flipped over (tilted past 90 degrees), disable it
 function checkStability () {
-    if (Math.abs(imuRoll) > FLIP_ANGLE_THRESHOLD && arm) {
+    if (Math.abs(measuredRoll) > FLIP_ANGLE_THRESHOLD && arm) {
         stable = false
     }
 }
 // Send the calculated motor speeds to the motor controller chip.
 // Only fly if: armed, stable, and both the gyroscope and motor controller are working.
 function updateMotors () {
-    if (!arm || !stable || !mcExists || !gyroExists) {
+    if (!arm || !stable || !motorControllerExists || !gyroExists) {
         airbit.resetPidState()
         if (motorTesting) {
             airbit.setMotorSpeeds(motorA, motorB, motorC, motorD)
@@ -214,7 +214,7 @@ function radioSendData () {
     radio.sendValue("R2", roll)
     radio.sendValue("yp", yawP)
     radio.sendValue("yd", yawD)
-    radio.sendValue("v", batterymVoltSmooth)
+    radio.sendValue("v", batteryMillivoltsSmoothed)
     radio.sendValue("p0", pins.analogReadPin(AnalogPin.P0))
 }
 input.onButtonPressed(Button.AB, function () {
@@ -232,18 +232,18 @@ input.onButtonPressed(Button.B, function () {
 // Process the pitch (forward/back tilt) command from the remote.
 // Expo makes small movements gentler. The value is clamped to the angle limit.
 function receivePitch (value: number) {
-    pitch = expo(value) / PITCH_SCALE
+    pitch = applyExponentialCurve(value) / PITCH_SCALE
     pitch = Math.constrain(pitch, -ANGLE_LIMIT, ANGLE_LIMIT)
 }
 // Process the roll (left/right tilt) command from the remote
 function receiveRoll (value: number) {
-    roll = expo(value) / ROLL_SCALE
+    roll = applyExponentialCurve(value) / ROLL_SCALE
     roll = Math.constrain(roll, -ANGLE_LIMIT, ANGLE_LIMIT)
 }
 // Process the throttle (up/down power) command. If battery is low, limit the max power.
 function receiveThrottle (value: number) {
     throttle = Math.constrain(value, 0, MAX_THROTTLE)
-    if (batterymVoltSmooth < LOW_BATTERY_VOLTAGE) {
+    if (batteryMillivoltsSmoothed < LOW_BATTERY_VOLTAGE) {
         throttle = Math.constrain(throttle, 0, LOW_BATTERY_THROTTLE)
     }
 }
@@ -370,14 +370,14 @@ function sounds () {
         soundStage = 3
     }
 }
-// Expo curve: makes the joystick less sensitive near the center.
+// Exponential curve: makes the joystick less sensitive near the center.
 // Small movements = very small changes (precise control).
 // Big movements = big changes (fast response).
-function expo (inp: number) {
-    if (inp >= 0) {
-        return inp / expoSetting + inp * inp / expoFactor
+function applyExponentialCurve (joystickValue: number) {
+    if (joystickValue >= 0) {
+        return joystickValue / expoSetting + joystickValue * joystickValue / expoFactor
     }
-    return inp / expoSetting - inp * inp / expoFactor
+    return joystickValue / expoSetting - joystickValue * joystickValue / expoFactor
 }
 // --- Flight Input State ---
 // These are the commands the pilot sends from the remote controller
@@ -395,11 +395,11 @@ let motorC = 0     // Back-right
 let motorD = 0     // Front-right
 let motorTesting = false
 
-// --- IMU Angles ---
+// --- Measured Angles ---
 // The actual angles the drone is tilted at right now, measured by the gyroscope
-let imuRoll = 0    // Actual left/right tilt (degrees)
-let imuPitch = 0   // Actual forward/back tilt (degrees)
-let imuYaw = 0     // Actual spin angle (degrees)
+let measuredRoll = 0    // Actual left/right tilt (degrees)
+let measuredPitch = 0   // Actual forward/back tilt (degrees)
+let measuredYaw = 0     // Actual spin angle (degrees)
 
 // --- PID Tuning Parameters ---
 // PID stands for Proportional, Integral, Derivative — it's a control algorithm.
@@ -413,16 +413,16 @@ let rollPitchD = 15
 let yawP = 5
 let yawD = 70
 
-// --- Expo Curve ---
+// --- Exponential Curve ---
 let expoSetting = 2
 let expoFactor = EXPO_BASE * EXPO_BASE / (EXPO_BASE - EXPO_BASE / expoSetting)
 
 // --- Battery ---
-// Smoothed battery voltage to avoid jumpy readings (millivolts)
-let batterymVoltSmooth = 3700
+// Smoothed battery voltage — avoids jumpy readings (millivolts)
+let batteryMillivoltsSmoothed = 3700
 
 // --- Hardware Status ---
-let mcExists = false    // Motor controller chip found?
+let motorControllerExists = false    // Motor controller chip found?
 let gyroExists = false  // Gyroscope sensor found?
 let stable = true       // Is the drone right-side up?
 
@@ -467,11 +467,11 @@ function updateDisplay () {
         basic.showString("Tilted. Please reset.")
         return
     }
-    if (batterymVoltSmooth > NORMAL_BATTERY_VOLTAGE) {
+    if (batteryMillivoltsSmoothed > NORMAL_BATTERY_VOLTAGE) {
         screen()
         return
     }
-    if (batterymVoltSmooth > LOW_BATTERY_VOLTAGE) {
+    if (batteryMillivoltsSmoothed > LOW_BATTERY_VOLTAGE) {
         basic.showLeds(`
             . . # . .
             . # . # .
