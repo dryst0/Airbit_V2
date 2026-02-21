@@ -2,22 +2,51 @@
 // AIRBIT HARDWARE LIBRARY
 // ============================================================================
 //
-// This file talks to the actual hardware chips on the drone:
+// This file talks to the actual hardware chips on the drone board.
 //
-// 1. GYROSCOPE (IMU) - a tiny sensor that measures how the drone is tilted
-//    and how fast it is rotating. Like the inner ear that helps you balance.
+// WHAT IS I2C?
+// ------------
+// The micro:bit needs to talk to several tiny chips on the drone board.
+// It does this using I2C (pronounced "I-squared-C"), a communication system
+// that works like a shared telephone line with just two wires:
+//   - SDA (data wire) — carries the actual messages back and forth
+//   - SCL (clock wire) — keeps everyone in sync, like a ticking metronome
+// Every chip on the line has its own "phone number" (called an address).
+// When the micro:bit wants to talk to a specific chip, it dials that
+// address first, then sends or asks for data. Only the chip with that
+// address responds — the others stay quiet.
 //
-// 2. MOTOR CONTROLLER (PCA9685) - a chip that controls the speed of all 4
-//    motors. We tell it a number 0-255 and it sends the right amount of
-//    power to each motor.
+// WHAT IS AN IMU (GYROSCOPE + ACCELEROMETER)?
+// --------------------------------------------
+// An IMU (Inertial Measurement Unit) is a tiny sensor that measures movement.
+// Ours contains two sensors in one chip:
+//   - GYROSCOPE — measures how fast the drone is spinning (rotation speed).
+//     Think of spinning a basketball on your finger — the gyroscope measures
+//     how quickly it turns. It is very accurate for quick movements, but
+//     over time it slowly "drifts" (like a clock that gains a few seconds
+//     each hour).
+//   - ACCELEROMETER — measures which direction gravity pulls. When the
+//     drone tilts, gravity pulls sideways a little, and the accelerometer
+//     detects that tilt. It doesn't drift, but vibrations from the motors
+//     make it jittery during flight.
+// We combine both sensors together (see calculateAngles) to get a tilt
+// measurement that is both accurate and stable.
 //
-// 3. BAROMETER - measures air pressure to estimate altitude (height).
+// THE CHIPS ON OUR DRONE:
+// -----------------------
+// 1. GYROSCOPE (MPU-6050 IMU) — I2C address 104
+//    Measures tilt and rotation. Like the inner ear that helps you balance.
 //
-// The micro:bit talks to these chips using I2C, which is like a two-wire
-// telephone line. Each chip has its own "phone number" (address).
+// 2. MOTOR CONTROLLER (PCA9685) — I2C address 98
+//    Controls the speed of all 4 motors. We tell it a number 0-255 and it
+//    sends the right amount of power to each motor.
 //
-// This file also contains the PID STABILIZATION algorithm - the math that
-// keeps the drone level in the air by adjusting motor speeds.
+// 3. BAROMETER — I2C address 99
+//    Measures air pressure to estimate altitude (height above ground).
+//
+// This file also contains the PID STABILIZATION algorithm — the math that
+// keeps the drone level in the air by adjusting motor speeds hundreds of
+// times per second.
 // ============================================================================
 
 //% weight=100 color=#0fbc11 icon=""
@@ -67,7 +96,10 @@ namespace airbit {
 
 
     // Reset all PID memory to zero — like clearing the slate.
-    // Called when the drone is disarmed so old corrections don't carry over.
+    // WHY? The PID algorithm remembers past errors (integral) and how fast things
+    // were changing (derivative). If we don't clear these when the drone is
+    // disarmed, old corrections from the last flight would kick in the moment
+    // we take off again — potentially causing a sudden jerk or flip.
     //% blockID=airbit_clean_reg
     //% block="Reset Stabilization"
     //% group='Control'
@@ -92,7 +124,10 @@ namespace airbit {
 
     }
 
-    // Get the battery charge as a percentage (0% = empty, 100% = full)
+    // Get the battery charge as a percentage (0% = empty, 100% = full).
+    // WHY? The battery reports its charge as a voltage (3400-4200 millivolts),
+    // but that's not intuitive. We convert it to 0-100% so the pilot can quickly
+    // understand how much flight time is left — just like a phone battery icon.
     //% blockID=airbit_battery_level
     //% block="Battery Level"
     //% group='Battery management'
@@ -103,8 +138,11 @@ namespace airbit {
 
 
     // Read the battery voltage and smooth it out.
-    // Smoothing works like a running average — it mixes 10% of the new reading
-    // with 90% of the old one. This prevents the number from jumping around.
+    // WHY SMOOTH? The raw battery reading jumps up and down because of electrical
+    // noise (like static on a radio). If we used it directly, the battery display
+    // would flicker constantly. Smoothing mixes 10% of the new reading with 90%
+    // of the old one — like slowly stirring new paint into an existing color.
+    // This gives a stable number that still tracks real changes over time.
     //% blockID=airbit_battery_calculation
     //% block="Battery Calculation"
     //% group='Battery management'
@@ -142,10 +180,22 @@ namespace airbit {
 
 
     // Calculate the drone's tilt angles from the raw sensor data.
-    // Uses a "complementary filter" — it blends two sources:
-    //   - The GYROSCOPE is accurate for fast changes (99% weight)
-    //   - The ACCELEROMETER is accurate over time (1% weight)
-    // Together they give a reliable angle even during vibration.
+    //
+    // WHY DO WE NEED THIS? The gyroscope and accelerometer give us raw numbers,
+    // but we need to know the actual tilt angle in degrees (like "tilted 5° to
+    // the right"). Getting a good angle is tricky because each sensor has a flaw:
+    //   - The GYROSCOPE tells us how fast we're rotating, not the angle itself.
+    //     We calculate the angle by adding up tiny rotations over time, but small
+    //     errors accumulate — like a pedometer that slowly over-counts your steps.
+    //   - The ACCELEROMETER can measure the tilt angle directly from gravity, but
+    //     motor vibrations make it jittery — like trying to read a book on a bus.
+    //
+    // THE SOLUTION: A "complementary filter" blends both sensors together:
+    //   angle = 99% × gyroscope angle + 1% × accelerometer angle
+    // The gyroscope handles quick movements (99% trust), while the accelerometer
+    // gently corrects the drift over time (1% nudge). It's like navigating with
+    // a compass that wobbles (accelerometer) and a step-counter that drifts
+    // (gyroscope) — together, they keep you on track.
     //% blockID=airbit_calculate_angles
     //% block="Calculate Angles"
     //% group='Control'
@@ -178,7 +228,12 @@ namespace airbit {
 
 
 
-    // Send speed values (0-255) to each of the 4 motors via the motor controller chip
+    // Send speed values (0-255) to each of the 4 motors via the motor controller chip.
+    // Each I2C message packs two pieces of info into one 16-bit number:
+    //   - The register address (which motor) in the high byte
+    //   - The speed value (0-255) in the low byte
+    // The "<<8 |" trick shifts the register left by 8 bits and combines it with
+    // the speed, like writing a street address and apartment number on one line.
     //% blockID=airbit_motor_speed
     //% block="Set Motor Speeds $m0 $m1 $m2 $m3"
     //% m0.min=0 m0.max=255
@@ -216,8 +271,11 @@ namespace airbit {
     }
 
 
-    // Wake up the gyroscope/accelerometer sensor and configure it.
-    // Shows "G" on the screen if the sensor is found, "NG" if not.
+    // Wake up the gyroscope/accelerometer sensor (IMU) and configure it.
+    // WHY? When the chip first powers on, it's in sleep mode to save energy.
+    // We need to: 1) wake it up, 2) verify it's actually there by reading its
+    // ID (like asking "who are you?"), and 3) configure the filters that smooth
+    // out the raw sensor data. Shows "G" on the screen if found, "NG" if not.
     //% blockID=airbit_start_imu
     //% block="Start Gyroscope"
     //% group='Control'
@@ -270,8 +328,12 @@ namespace airbit {
     }
 
 
-    // Read raw rotation speed (gyro) and acceleration (acc) data from the sensor.
-    // This gives us 6 numbers: gyroscopeX/Y/Z and accelerometerX/Y/Z.
+    // Read raw rotation speed and acceleration data from the IMU sensor over I2C.
+    // This gives us 6 numbers: gyroscopeX/Y/Z (how fast we're spinning on each
+    // axis) and accelerometerX/Y/Z (which direction gravity is pulling).
+    // WHY? These raw numbers are the drone's sense of balance — without them,
+    // the drone has no idea which way is up. We read them hundreds of times per
+    // second so the drone can react instantly to any tilt or gust of wind.
     //% blockID=airbit_read_imu
     //% block="Read Gyroscope"
     //% group='Control'
@@ -299,7 +361,11 @@ namespace airbit {
 
 
     // Wake up the motor controller chip (PCA9685) and check if it's connected.
-    // Shows "M" on the screen if found, "No PCA!" if not.
+    // WHY? The micro:bit can't power the motors directly — they need too much
+    // current. The motor controller chip acts as a middleman: we send it small
+    // I2C messages saying "motor 1 at speed 200", and it handles the heavy
+    // electrical work. We reset it, configure its output mode, then verify it
+    // responds by reading back a register. Shows "M" if found, "No PCA!" if not.
     //% blockID=airbit_start_pca
     //% block="Start Motors"
     //% group='Control'
@@ -331,8 +397,13 @@ namespace airbit {
 
 
     // Calibrate the gyroscope — the drone must be perfectly still!
-    // Takes 100 readings and averages them to find the sensor's "zero point".
-    // Without this, the drone would think it's always slowly spinning.
+    // WHY? Even when sitting still, the gyroscope doesn't read exactly zero.
+    // Every sensor has a small built-in error called "bias" — like a bathroom
+    // scale that reads 0.3 kg with nothing on it. If we don't correct for this,
+    // the drone would think it's slowly spinning and try to fight a rotation
+    // that isn't there. Calibration takes 100 readings while the drone is still,
+    // averages them to find this bias, and subtracts it from all future readings.
+    // It also records the current tilt as "level" using the accelerometer.
     //% blockID=airbit_calibrate_gyro
     //% block="Calibrate Gyroscope"
     //% group='Control'
@@ -362,8 +433,14 @@ namespace airbit {
 
 
 
-    // Accumulate integral (I) term only when flying and error is small enough.
-    // This prevents the integral from winding up during ground handling or large maneuvers.
+    // Accumulate the integral (I) term — a running total of small errors over time.
+    // WHY? Imagine the drone keeps drifting slightly left. The P correction pushes
+    // back, but not quite enough. The integral slowly adds up these small leftover
+    // errors and pushes harder and harder until the drift stops — like leaning more
+    // and more into a wind until you stop being pushed sideways.
+    // We only accumulate when actually flying (throttle up) and when the error is
+    // small. Large errors mean the drone is doing a big maneuver on purpose, and
+    // we don't want the integral to "wind up" and overcorrect afterwards.
     function accumulateIntegral() {
         if (throttle <= INTEGRAL_THROTTLE_THRESHOLD) return
         if (rollError > -INTEGRAL_RANGE && rollError < INTEGRAL_RANGE) {

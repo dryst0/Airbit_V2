@@ -73,7 +73,11 @@ const MOTOR_TEST_SPEED = 5
 // Both the drone and the remote must use the same radio group to talk
 const RADIO_GROUP = 7
 
-// Ignore tiny joystick movements — if the stick is barely moved, treat it as zero
+// Ignore tiny joystick movements — if the stick is barely moved, treat it as zero.
+// WHY? Joysticks are never perfectly centered. Even when you let go, they might
+// read 2 or 3 instead of exactly 0. Without a deadband, the drone would constantly
+// drift because it thinks the pilot is giving a tiny command. The deadband creates
+// a small "ignore zone" around the center where any reading is treated as zero.
 function applyJoystickDeadband () {
     if (Math.abs(roll) < JOYSTICK_DEADBAND) {
         roll = 0
@@ -152,14 +156,19 @@ function screen () {
         case 6: showMotorLeds(); break
     }
 }
-// Safety check: if the drone has flipped over (tilted past 90 degrees), disable it
+// Safety check: if the drone has flipped over (tilted past 90 degrees), disable it.
+// WHY? If the drone flips upside down, the motors pushing "up" would now push it
+// into the ground at full speed. Disabling the motors prevents damage and injury.
 function checkStability () {
     if (Math.abs(measuredRoll) > FLIP_ANGLE_THRESHOLD && arm) {
         stable = false
     }
 }
-// Send the calculated motor speeds to the motor controller chip.
+// Send the calculated motor speeds to the motor controller chip over I2C.
 // Only fly if: armed, stable, and both the gyroscope and motor controller are working.
+// WHY ALL THE CHECKS? Flying with a broken gyroscope means no balance — instant crash.
+// Flying while disarmed or flipped would be dangerous. These checks are like a
+// pre-flight checklist that pilots go through before every takeoff.
 // When not ready to fly, reset stabilization and either pass through motor test speeds or stop
 function handleMotorsNotReady () {
     airbit.resetPidState()
@@ -185,7 +194,11 @@ function trackLoopTime () {
     startTime = input.runningTime()
 }
 // The main flight loop — this runs hundreds of times per second.
-// Each cycle: read sensors, calculate angles, stabilize, and update motors.
+// WHY SO FAST? The drone is inherently unstable — without constant corrections,
+// it would tip over in a fraction of a second (like balancing a pencil on your
+// finger). The faster we read the sensors and adjust the motors, the smoother
+// and more stable the flight. Each cycle: read sensors → calculate angles →
+// run PID stabilization → check safety → update motors.
 // Only run PID stabilization when not in motor test mode
 function stabilizeIfFlying () {
     if (motorTesting) return
@@ -209,7 +222,10 @@ input.onButtonPressed(Button.A, function () {
         mode = DISPLAY_MODE_COUNT - 1
     }
 })
-// Send telemetry (debug data) back to the remote controller over radio
+// Send telemetry (debug data) back to the remote controller over radio.
+// WHY? During testing, the pilot needs to see what the drone is "thinking" —
+// PID settings, battery voltage, signal timing — without plugging in a cable.
+// We only send every 5 seconds to avoid flooding the radio channel.
 function radioSendData () {
     if (input.runningTime() - lastTelemetryTime < TELEMETRY_INTERVAL) return
     lastTelemetryTime = input.runningTime()
@@ -236,7 +252,9 @@ input.onButtonPressed(Button.B, function () {
     }
 })
 // Process the pitch (forward/back tilt) command from the remote.
-// Expo makes small movements gentler. The value is clamped to the angle limit.
+// The raw joystick value goes through the expo curve (for smoother control),
+// gets divided by PITCH_SCALE to convert to degrees, then clamped to a safe
+// maximum tilt angle so the drone can't flip over from a joystick command.
 function receivePitch (value: number) {
     pitch = applyExponentialCurve(value) / PITCH_SCALE
     pitch = Math.constrain(pitch, -ANGLE_LIMIT, ANGLE_LIMIT)
@@ -247,6 +265,10 @@ function receiveRoll (value: number) {
     roll = Math.constrain(roll, -ANGLE_LIMIT, ANGLE_LIMIT)
 }
 // Process the throttle (up/down power) command. If battery is low, limit the max power.
+// WHY LIMIT? A weak battery can't deliver full power safely. Pushing it too hard
+// can cause a sudden voltage drop, making the drone fall out of the sky. Capping
+// the throttle at 75% when the battery is low gives the pilot a gentler warning
+// and keeps enough voltage reserve for a safe landing.
 function receiveThrottle (value: number) {
     throttle = Math.constrain(value, 0, MAX_THROTTLE)
     if (batteryMillivoltsSmoothed < LOW_BATTERY_VOLTAGE) {
@@ -254,7 +276,10 @@ function receiveThrottle (value: number) {
     }
 }
 // Arm or disarm the drone. "Arming" is like turning the ignition key in a car.
-// When re-armed, reset the stability flag so the drone can fly again.
+// WHY HAVE AN ARM SWITCH? Safety! You don't want the motors to spin just because
+// the throttle stick is bumped. The pilot must deliberately flip the arm switch
+// before the motors will respond. When re-armed, we reset the stability flag so
+// the drone can fly again after being picked up from a flip.
 function receiveArm (value: number) {
     if (!arm && value) {
         stable = true
@@ -289,7 +314,12 @@ function resetFlightInputs () {
     yaw = 0
 }
 // Failsafe: if we haven't heard from the remote in a while, the drone is on its own!
-// After 3 seconds: start descending slowly. After 8 seconds: turn off completely.
+// WHY? If the pilot's remote loses connection (battery dies, goes out of range),
+// the drone would keep flying with its last command forever — dangerous! This
+// safety check measures how long it's been since the last radio message:
+//   - After 3 seconds of silence: reduce throttle and start descending slowly
+//   - After 8 seconds: shut off motors completely
+// This way a disconnected drone lands itself instead of flying away.
 function lostSignalCheck () {
     if (throttle <= FAILSAFE_THROTTLE || !arm) return
     const timeSinceLastSignal = input.runningTime() - radioReceivedTime
@@ -349,8 +379,13 @@ function sounds () {
     }
 }
 // Exponential curve: makes the joystick less sensitive near the center.
-// Small movements = very small changes (precise control).
-// Big movements = big changes (fast response).
+// WHY? Without this, the drone would be twitchy and hard to control.
+// Imagine steering a car where a tiny turn of the wheel makes you swerve —
+// you'd crash instantly. The expo curve makes small joystick movements produce
+// very gentle drone movements (for precise hovering), while big joystick
+// movements still give full speed (for fast maneuvers). The math uses a
+// quadratic (x²) formula: small inputs get squared into even smaller outputs,
+// but large inputs stay large.
 function applyExponentialCurve (joystickValue: number) {
     if (joystickValue >= 0) {
         return joystickValue / expoSetting + joystickValue * joystickValue / expoFactor
@@ -419,7 +454,8 @@ let lastTelemetryTime = 0
 // ============================================================================
 // Set up the radio so we can talk to the remote controller
 radio.setGroup(RADIO_GROUP)
-// Tell the micro:bit which pins are used for I2C communication with the sensors
+// Tell the micro:bit which physical pins connect to the I2C data (SDA) and
+// clock (SCL) wires. The drone board uses pins P2 and P1 instead of the defaults.
 i2crr.setI2CPins(DigitalPin.P2, DigitalPin.P1)
 // Wake up and test the gyroscope (shows "G" if found)
 basic.pause(100)
