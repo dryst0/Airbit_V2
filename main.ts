@@ -145,6 +145,9 @@ function radioSendData () {
 input.onButtonPressed(Button.AB, function () {
     mode = 0
 })
+input.onGesture(Gesture.ScreenDown, function () {
+    stable = false
+})
 input.onButtonPressed(Button.B, function () {
     mode += 1
     if (mode > 6) {
@@ -267,6 +270,20 @@ function motorTest () {
     motorA = 0
     motorTesting = false
 }
+function sounds () {
+    if (arm && soundStage == 0) {
+        soundExpression.giggle.playUntilDone()
+        soundStage = 1
+    }
+    if (airbit.batteryLevel() < 50 && soundStage == 1) {
+        soundExpression.slide.playUntilDone()
+        soundStage = 2
+    }
+    if (airbit.batteryLevel() < 20 && soundStage == 2) {
+        soundExpression.sad.playUntilDone()
+        soundStage = 3
+    }
+}
 function expo (inp: number) {
     if (inp >= 0) {
         return inp / expoSetting + inp * inp / expoFactor
@@ -274,6 +291,7 @@ function expo (inp: number) {
         return inp / expoSetting - inp * inp / expoFactor
     }
 }
+let soundStage = 0
 let yaw = 0
 let radioReceivedTime = 0
 let startTime = 0

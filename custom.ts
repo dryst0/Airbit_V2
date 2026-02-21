@@ -511,23 +511,6 @@ namespace airbit {
 
         return Math.round(1000 / looptime)
     }
-    export function sounds() {
-        if (arm && soundStage == 0) {
-            soundExpression.giggle.playUntilDone()
-            soundStage = 1
-        }
-        if (batteryLev < 50 && soundStage == 1) {
-            soundExpression.slide.playUntilDone()
-            soundStage = 2
-        }
-        if (batteryLev < 20 && soundStage == 2) {
-            soundExpression.sad.playUntilDone()
-            soundStage = 3
-        }
-    }
-    input.onGesture(Gesture.ScreenDown, function () {
-        stable = 0
-    })
 
 
 
@@ -554,10 +537,7 @@ namespace airbit {
     let rollDiff = 0
     let accRollOffset = 0  //  Calibration offset of the Roll
     let accPitchOffset = 0  //  Calibration offset of the Pitch
-    let soundStage = 0
     let oldTime = 0
-    let startTime = 0
-    let cpuTime = 0
     let yawIdiff = 0
     let yawDiff = 0
     let rollDdiff = 0
@@ -566,7 +546,6 @@ namespace airbit {
     let pitchIdiff = 0
     let rollIdiff = 0
     let yawDdiff = 0
-    let stable = 0
     let gyroZcalibration = 0
     let gyroZ = 0
     let gyroZdelta = 0
@@ -582,10 +561,7 @@ namespace airbit {
     let accZ = 0
     let accX = 0
     let accPitch = 0
-    let batteryLev = 0
     let BATTERY_FACTOR = 5.94
-    let arm = 0
-    let mode = 0
 
 
     let PCA_REG_LEDUOT = 8
@@ -607,11 +583,6 @@ namespace airbit {
     let IMU_ACCEL_CONFIG_2 = 29
     let IMU_REG_ADDRESS = 104
     let BARO_REG_SLAVEADR = 99
-    rollPitchP = 0.5
-    rollPitchI = 0
-    rollPitchD = 15
-
-    let radioGroup = 7
 
 
 
