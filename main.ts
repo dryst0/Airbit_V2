@@ -142,9 +142,6 @@ function radioSendData () {
     radio.sendValue("p0", pins.analogReadPin(AnalogPin.P0))
     basic.pause(5000)
 }
-function gyroAccBubble () {
-	
-}
 input.onButtonPressed(Button.AB, function () {
     mode = 0
 })
@@ -186,8 +183,6 @@ radio.onReceivedValue(function (name, value) {
         yaw += value * 0.1
     }
 })
-// smartBar(0, throttle)
-// smartBar(4, airbit.batteryLevel())
 function dots () {
     basic.clearScreen()
     led.plot(Math.map(roll, -15, 15, 0, 4), Math.map(pitch, -15, 15, 4, 0))
@@ -333,7 +328,6 @@ expoSetting = 2
 expoFactor = 45 * 45 / (45 - 45 / expoSetting)
 radio.setGroup(radioGroup)
 i2crr.setI2CPins(DigitalPin.P2, DigitalPin.P1)
-// i2crr.setI2CPins(DigitalPin.P2, DigitalPin.P1)
 basic.pause(100)
 airbit.IMU_Start()
 basic.pause(100)
@@ -373,21 +367,6 @@ basic.forever(function () {
             `)
     }
 })
-// basic.forever(function () {
-// 
-// airbit.batteryCalculation()
-// 
-// radio.sendValue("l", looptime)
-// 
-// radio.sendValue("p", rollPitchP)
-// 
-// radio.sendValue("i", rollPitchI)
-// 
-// radio.sendValue("a", tuningOutA)
-// 
-// radio.sendValue("b", tuningOutB)
-// 
-// })
 basic.forever(function () {
     radioSendData()
 })
