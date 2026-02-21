@@ -34,13 +34,13 @@ function testGroup(name: string) {
 }
 
 // --- PID Stabilization Tests ---
-// stabilisePid() reads these main.ts globals: roll, pitch, yaw, imuRoll, imuPitch, imuYaw,
+// stabilize() reads these main.ts globals: roll, pitch, yaw, imuRoll, imuPitch, imuYaw,
 // throttle, rollPitchP, rollPitchI, rollPitchD, yawP, yawD
-// stabilisePid() writes these main.ts globals: motorA, motorB, motorC, motorD
+// stabilize() writes these main.ts globals: motorA, motorB, motorC, motorD
 
-testGroup("stabilisePid: zero error produces equal motor speeds")
+testGroup("stabilize: zero error produces equal motor speeds")
 
-airbit.cleanReg()
+airbit.resetPidState()
 imuRoll = 0
 imuPitch = 0
 imuYaw = 0
@@ -54,7 +54,7 @@ rollPitchD = 15
 yawP = 5
 yawD = 70
 
-airbit.stabilisePid()
+airbit.stabilize()
 
 // With zero error, all corrections are 0. throttleScaled = 60 * 2.55 = 153
 assertEqual(motorA, 153, "Zero error: motorA should equal scaled throttle")
@@ -62,9 +62,9 @@ assertEqual(motorB, 153, "Zero error: motorB should equal scaled throttle")
 assertEqual(motorC, 153, "Zero error: motorC should equal scaled throttle")
 assertEqual(motorD, 153, "Zero error: motorD should equal scaled throttle")
 
-testGroup("stabilisePid: roll error produces differential motor speeds")
+testGroup("stabilize: roll error produces differential motor speeds")
 
-airbit.cleanReg()
+airbit.resetPidState()
 imuRoll = 5
 imuPitch = 0
 imuYaw = 0
@@ -78,7 +78,7 @@ rollPitchD = 15
 yawP = 5
 yawD = 70
 
-airbit.stabilisePid()
+airbit.stabilize()
 
 // rollDiff = 0 - 5 = -5
 // rollCorrection = -5*0.9 + 0 + -5*15 = -4.5 - 75 = -79.5
@@ -87,9 +87,9 @@ airbit.stabilisePid()
 assertTrue(motorA < motorC, "Roll right tilt: motorA (left) should be less than motorC (right)")
 assertTrue(motorB < motorD, "Roll right tilt: motorB (left) should be less than motorD (right)")
 
-testGroup("stabilisePid: motor speeds clamped to 0-255")
+testGroup("stabilize: motor speeds clamped to 0-255")
 
-airbit.cleanReg()
+airbit.resetPidState()
 imuRoll = 15
 imuPitch = 15
 imuYaw = 0
@@ -103,7 +103,7 @@ rollPitchD = 15
 yawP = 5
 yawD = 70
 
-airbit.stabilisePid()
+airbit.stabilize()
 
 assertTrue(motorA >= 0, "Motor A clamped: not negative")
 assertTrue(motorA <= 255, "Motor A clamped: not over 255")
@@ -134,14 +134,14 @@ assertEqual(expectedMax, 100, "Battery mapping: 4200mV should be 100%")
 let expectedMid = Math.map(3800, 3400, 4200, 0, 100)
 assertEqual(expectedMid, 50, "Battery mapping: 3800mV should be 50%")
 
-// --- cleanReg Tests ---
-// cleanReg() resets PID accumulators. We can verify it resets imuYaw (a main.ts global).
+// --- resetPidState Tests ---
+// resetPidState() resets PID accumulators. We can verify it resets imuYaw (a main.ts global).
 
-testGroup("cleanReg: resets imuYaw to zero")
+testGroup("resetPidState: resets imuYaw to zero")
 
 imuYaw = 45
-airbit.cleanReg()
-assertEqual(imuYaw, 0, "cleanReg should reset imuYaw to 0")
+airbit.resetPidState()
+assertEqual(imuYaw, 0, "resetPidState should reset imuYaw to 0")
 
 // --- All Tests Passed ---
 

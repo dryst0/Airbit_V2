@@ -65,10 +65,10 @@ namespace airbit {
      */
 
     //% blockID=airbit_clean_reg
-    //% block="Clean Registers"
+    //% block="Reset Stabilization"
     //% group='Control'
 
-    export function cleanReg() {
+    export function resetPidState() {
         rollDiff = 0
         pitchDiff = 0
         lastRollDiff = 0
@@ -120,10 +120,10 @@ namespace airbit {
     */
 
     //% blockID=airbit_battery_calculation_simple
-    //% block="Battery milliVolts"
+    //% block="Battery Millivolts"
     //% group='Battery management'
 
-    export function batterymVolt() {
+    export function batteryMillivolts() {
         return Math.round(pins.analogReadPin(AnalogPin.P0) * BATTERY_FACTOR)
 
     }
@@ -136,10 +136,10 @@ namespace airbit {
      */
 
     //% blockID=airbit_read_pca
-    //% block="Read Motor Controller"
+    //% block="Read Motor Register"
     //% group='System'
 
-    export function readPCA(num: number) {
+    export function readMotorRegister(num: number) {
         pins.i2cWriteNumber(
             PCA_ADDRESS,
             num,
@@ -206,7 +206,7 @@ namespace airbit {
         Control the individual speed of each motor.
      */
     //% blockID=airbit_motor_speed
-    //% block="Motor Speed $m0 $m1 $m2 $m3"
+    //% block="Set Motor Speeds $m0 $m1 $m2 $m3"
     //% m0.min=0 m0.max=255
     //% m1.min=0 m1.max=255
     //% m2.min=0 m2.max=255
@@ -214,7 +214,7 @@ namespace airbit {
 
     //% group='Control'
 
-    export function MotorSpeed(m0: number, m1: number, m2: number, m3: number) {
+    export function setMotorSpeeds(m0: number, m1: number, m2: number, m3: number) {
         pins.i2cWriteNumber(
             PCA_ADDRESS,
             PCA_PWM0 << 8 | m3,
@@ -247,7 +247,7 @@ namespace airbit {
     */
 
     //% blockID=airbit_start_imu
-    //% block="Start Gyro/Acc"
+    //% block="Start Gyroscope"
     //% group='Control'
 
     function writeImuRegister(register: number, value: number) {
@@ -259,7 +259,7 @@ namespace airbit {
         )
     }
 
-    export function IMU_Start() {
+    export function startImu() {
         // Full reset chip (H_RESET, internal 20MHz clock)
         writeImuRegister(IMU_PWR_MGMT_1, 0x80)
         basic.pause(500)
@@ -288,10 +288,10 @@ namespace airbit {
     */
 
     //% blockID=airbit_write_pca
-    //% block="Write PCA"
+    //% block="Write Motor Register"
     //% group='System'
 
-    export function PCA_Write(register: number, value: number) {
+    export function writeMotorRegister(register: number, value: number) {
         pins.i2cWriteNumber(
             PCA_ADDRESS,
             register << 8 | value,
@@ -306,10 +306,10 @@ namespace airbit {
      */
 
     //% blockID=airbit_read_imu
-    //% block="Read Gyro/Acc"
+    //% block="Read Gyroscope"
     //% group='Control'
 
-    export function IMU_sensorRead() {
+    export function readImuSensors() {
         pins.i2cWriteNumber(
             IMU_ADDRESS,
             IMU_REG_GYRO_XOUT_H,
@@ -337,15 +337,15 @@ namespace airbit {
     */
 
     //% blockID=airbit_start_pca
-    //% block="Start Motor Controller"
+    //% block="Start Motors"
     //% group='Control'
 
-    export function PCA_Start() {
-        PCA_Write(PCA_REG_MODE1, PCA_RESET)
-        PCA_Write(PCA_REG_MODE2, PCA_MODE2_CONFIG)
-        PCA_Write(PCA_REG_LEDOUT, PCA_LEDOUT_INDIVIDUAL)
+    export function startMotorController() {
+        writeMotorRegister(PCA_REG_MODE1, PCA_RESET)
+        writeMotorRegister(PCA_REG_MODE2, PCA_MODE2_CONFIG)
+        writeMotorRegister(PCA_REG_LEDOUT, PCA_LEDOUT_INDIVIDUAL)
 
-        MotorSpeed(0, 0, 0, 0)     // Zero out motor speed 
+        setMotorSpeeds(0, 0, 0, 0)     // Zero out motor speed
         // Self test to see if data reg can be read.
         pins.i2cWriteNumber(
             PCA_ADDRESS,
@@ -371,16 +371,16 @@ namespace airbit {
     * Calibrate the gyro and accelerometer
     */
     //% blockID=airbit_calibrate_gyro
-    //% block="Calibrate Gyro/Acc"
+    //% block="Calibrate Gyroscope"
     //% group='Control'
 
-    export function IMU_gyro_calibrate() {
+    export function calibrateGyro() {
         gyroXcalibration = 0
         gyroYcalibration = 0
         gyroZcalibration = 0
         basic.showString("C")
         for (let index = 0; index < GYRO_CALIBRATION_SAMPLES; index++) {
-            IMU_sensorRead()
+            readImuSensors()
             gyroXcalibration += gyroX
             gyroYcalibration += gyroY
             gyroZcalibration += gyroZ
@@ -405,11 +405,10 @@ namespace airbit {
      */
 
     //% blockID=airbit_stabilise_pid
-    //% block="Stabilise PID"
+    //% block="Stabilize Drone"
     //% group='Control'
 
-
-    export function stabilisePid() {
+    export function stabilize() {
 
         rollDiff = roll - imuRoll
         pitchDiff = pitch - imuPitch      // Reversing the pitch
@@ -463,7 +462,7 @@ namespace airbit {
 
 
 
-    export function PCA_ReadMode1() {
+    export function readMotorControllerMode() {
         pins.i2cWriteNumber(
             PCA_ADDRESS,
             PCA_REG_MODE1,

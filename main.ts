@@ -36,12 +36,7 @@ const MOTOR_TEST_SPEED = 5
 // --- Radio ---
 const RADIO_GROUP = 7
 
-function servo1_test () {
-    pins.digitalWritePin(DigitalPin.P1, 1)
-    control.waitMicros(1500 + roll * 10)
-    pins.digitalWritePin(DigitalPin.P1, 0)
-}
-function JoystickDeadBand () {
+function applyJoystickDeadband () {
     if (Math.abs(roll) < JOYSTICK_DEADBAND) {
         roll = 0
     }
@@ -84,7 +79,7 @@ function showBatteryBar () {
     led.plotBarGraph(airbit.batteryLevel(), 100)
 }
 function showBatteryVoltage () {
-    basic.showNumber(airbit.batterymVolt())
+    basic.showNumber(airbit.batteryMillivolts())
 }
 function showAnalogReading () {
     basic.showNumber(pins.analogReadPin(AnalogPin.P0))
@@ -106,7 +101,7 @@ function screen () {
         return
     }
     switch (mode) {
-        case 0: dots(); break
+        case 0: showJoystickPosition(); break
         case 1: showBatteryBar(); break
         case 2: showBatteryVoltage(); break
         case 3: showAnalogReading(); break
@@ -123,16 +118,16 @@ function checkStability () {
 function updateMotors () {
     if (arm && stable && mcExists && gyroExists) {
         if (throttle == 0) {
-            airbit.MotorSpeed(MOTOR_IDLE_SPEED, MOTOR_IDLE_SPEED, MOTOR_IDLE_SPEED, MOTOR_IDLE_SPEED)
+            airbit.setMotorSpeeds(MOTOR_IDLE_SPEED, MOTOR_IDLE_SPEED, MOTOR_IDLE_SPEED, MOTOR_IDLE_SPEED)
         } else {
-            airbit.MotorSpeed(motorA, motorB, motorC, motorD)
+            airbit.setMotorSpeeds(motorA, motorB, motorC, motorD)
         }
     } else {
-        airbit.cleanReg()
+        airbit.resetPidState()
         if (motorTesting) {
-            airbit.MotorSpeed(motorA, motorB, motorC, motorD)
+            airbit.setMotorSpeeds(motorA, motorB, motorC, motorD)
         } else {
-            airbit.MotorSpeed(0, 0, 0, 0)
+            airbit.setMotorSpeeds(0, 0, 0, 0)
         }
     }
 }
@@ -142,12 +137,12 @@ function trackLoopTime () {
 }
 function mainLoop () {
     while (true) {
-        airbit.IMU_sensorRead()
+        airbit.readImuSensors()
         airbit.calculateAngles()
         basic.pause(1)
         lostSignalCheck()
         if (!motorTesting) {
-            airbit.stabilisePid()
+            airbit.stabilize()
         }
         checkStability()
         updateMotors()
@@ -214,7 +209,7 @@ radio.onReceivedValue(function (name, value) {
         case "Y": yaw += value * YAW_SCALE; break
     }
 })
-function dots () {
+function showJoystickPosition () {
     basic.clearScreen()
     led.plot(Math.map(roll, -ANGLE_LIMIT, ANGLE_LIMIT, 0, 4), Math.map(pitch, -ANGLE_LIMIT, ANGLE_LIMIT, 4, 0))
     led.plot(Math.map(yaw, -YAW_RANGE, YAW_RANGE, 0, 4), 4)
@@ -318,67 +313,60 @@ function expo (inp: number) {
         return inp / expoSetting - inp * inp / expoFactor
     }
 }
-let soundStage = 0
-let yaw = 0
-let radioReceivedTime = 0
-let startTime = 0
-let cpuTime = 0
-let motorTesting = false
-let throttle = 0
-let mode = 0
-let pitch = 0
+// --- Flight Input State ---
 let roll = 0
+let pitch = 0
+let yaw = 0
+let throttle = 0
 let arm = 0
-let expoFactor = 0
-let expoSetting = 0
-let motorD = 0
+
+// --- Motor Output ---
+let motorA = 0
 let motorB = 0
 let motorC = 0
-let motorA = 0
-let yawD = 0
-let yawP = 0
-let rollPitchD = 0
-let rollPitchI = 0
-let rollPitchP = 0
-let batterymVoltSmooth = 0
+let motorD = 0
+let motorTesting = false
+
+// --- IMU Angles ---
 let imuRoll = 0
 let imuPitch = 0
-let stable = false
-let gyroExists = false
-let mcExists = false
-let batteryVolt = 0
 let imuYaw = 0
-let baroExists = false
-mcExists = false
-gyroExists = false
-stable = true
-let radioGroup = RADIO_GROUP
-imuPitch = 0
-imuRoll = 0
-batterymVoltSmooth = 3700
-// Default: 0.7
-rollPitchP = 0.9
-rollPitchI = 0.004
-// Default: 15
-rollPitchD = 15
-// Default: 4
-yawP = 5
-// Default: 10
-yawD = 70
-motorA = 0
-motorC = 0
-motorB = 0
-motorD = 0
-expoSetting = 2
-expoFactor = EXPO_BASE * EXPO_BASE / (EXPO_BASE - EXPO_BASE / expoSetting)
-radio.setGroup(radioGroup)
+
+// --- PID Tuning Parameters ---
+let rollPitchP = 0.9
+let rollPitchI = 0.004
+let rollPitchD = 15
+let yawP = 5
+let yawD = 70
+
+// --- Expo Curve ---
+let expoSetting = 2
+let expoFactor = EXPO_BASE * EXPO_BASE / (EXPO_BASE - EXPO_BASE / expoSetting)
+
+// --- Battery ---
+let batterymVoltSmooth = 3700
+
+// --- Hardware Status ---
+let mcExists = false
+let gyroExists = false
+let stable = true
+
+// --- Display ---
+let mode = 0
+let soundStage = 0
+
+// --- Timing ---
+let startTime = 0
+let cpuTime = 0
+let radioReceivedTime = 0
+radio.setGroup(RADIO_GROUP)
 i2crr.setI2CPins(DigitalPin.P2, DigitalPin.P1)
 basic.pause(100)
-airbit.IMU_Start()
+airbit.startImu()
 basic.pause(100)
-airbit.PCA_Start()
+airbit.startMotorController()
 basic.pause(100)
-airbit.IMU_gyro_calibrate()
+airbit.calibrateGyro()
 while (arm) {
     basic.showString("Disarm!")
 }
