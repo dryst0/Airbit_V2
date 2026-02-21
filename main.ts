@@ -1,41 +1,79 @@
+// ============================================================================
+// AIRBIT V2 — Drone Flight Controller
+// ============================================================================
+//
+// HOW A DRONE FLIES
+// -----------------
+// A drone has 4 motors, one on each corner. Each motor spins a propeller.
+// By spinning some motors faster than others, the drone can tilt and move:
+//
+//     Motor B (front-left)    Motor D (front-right)
+//              \                /
+//               \   micro:bit  /
+//                +-----------+
+//               /             \
+//              /               \
+//     Motor A (back-left)     Motor C (back-right)
+//
+// ROLL  = tilt left/right   (lean your body sideways)
+// PITCH = tilt forward/back (lean your body forward)
+// YAW   = spin left/right   (turn on the spot like a top)
+//
+// The pilot sends commands from a remote controller over radio.
+// This code reads those commands, checks the drone's sensors,
+// and adjusts the motor speeds to keep the drone stable in the air.
+// ============================================================================
+
 // --- Joystick ---
+// The deadband ignores tiny joystick movements so the drone stays still
 const JOYSTICK_DEADBAND = 5
+// Maximum tilt angle in degrees the pilot can request
 const ANGLE_LIMIT = 15
 const YAW_RANGE = 30
+// How much the joystick input is scaled down for each axis
 const PITCH_SCALE = -3
 const ROLL_SCALE = 3
 const YAW_SCALE = 0.1
 
 // --- Throttle ---
+// Throttle controls how much power goes to all motors (0 = off, 100 = full)
 const MAX_THROTTLE = 100
 const LOW_BATTERY_THROTTLE = 75
+// When armed but throttle is zero, motors spin very slowly so they're ready
 const MOTOR_IDLE_SPEED = 5
 
 // --- Safety ---
+// If the drone tilts more than 90 degrees, something is very wrong — stop motors!
 const FLIP_ANGLE_THRESHOLD = 90
+// If we lose the radio signal, slowly descend then turn off
 const FAILSAFE_THROTTLE = 65
-const FAILSAFE_TIMEOUT_DESCEND = 3000
-const FAILSAFE_TIMEOUT_DISARM = 8000
+const FAILSAFE_TIMEOUT_DESCEND = 3000  // Start descending after 3 seconds
+const FAILSAFE_TIMEOUT_DISARM = 8000   // Turn off motors after 8 seconds
 
 // --- Battery ---
+// Battery voltage tells us how much charge is left (millivolts)
 const LOW_BATTERY_VOLTAGE = 3400
 const NORMAL_BATTERY_VOLTAGE = 3450
+// These analog readings detect if the USB charger is plugged in
 const CHARGING_THRESHOLD = 780
 const CHARGING_COMPLETE_THRESHOLD = 950
 
 // --- Expo ---
+// Expo makes the joystick less sensitive near the center for smoother control
 const EXPO_BASE = 45
 
 // --- Display ---
 const DISPLAY_MODE_COUNT = 7
-const TELEMETRY_INTERVAL = 5000
+const TELEMETRY_INTERVAL = 5000  // Send debug info over radio every 5 seconds
 const MOTOR_TEST_ITERATIONS = 50
 const MOTOR_TEST_PAUSE = 20
 const MOTOR_TEST_SPEED = 5
 
 // --- Radio ---
+// Both the drone and the remote must use the same radio group to talk
 const RADIO_GROUP = 7
 
+// Ignore tiny joystick movements — if the stick is barely moved, treat it as zero
 function applyJoystickDeadband () {
     if (Math.abs(roll) < JOYSTICK_DEADBAND) {
         roll = 0
@@ -44,9 +82,11 @@ function applyJoystickDeadband () {
         pitch = 0
     }
 }
+// Check if the USB charger is plugged in by reading the voltage on pin P0
 function isCharging (): boolean {
     return pins.analogReadPin(AnalogPin.P0) > CHARGING_THRESHOLD
 }
+// Show a battery icon that fills up while charging
 function showChargingAnimation () {
     if (pins.analogReadPin(AnalogPin.P0) > CHARGING_COMPLETE_THRESHOLD) {
         basic.showIcon(IconNames.Yes)
@@ -87,6 +127,7 @@ function showAnalogReading () {
 function showThrottle () {
     basic.showNumber(throttle)
 }
+// Show motor speeds as brightness in each corner, with a dot showing the tilt angle
 function showMotorLeds () {
     basic.clearScreen()
     led.plotBrightness(0, 4, motorA)
@@ -95,6 +136,7 @@ function showMotorLeds () {
     led.plotBrightness(4, 0, motorD)
     led.plot(Math.map(imuRoll, -ANGLE_LIMIT, ANGLE_LIMIT, 0, 4), Math.map(imuPitch, -ANGLE_LIMIT, ANGLE_LIMIT, 4, 0))
 }
+// Pick what to show on the LED screen — use buttons A and B to switch modes
 function screen () {
     if (isCharging()) {
         showChargingAnimation()
@@ -110,11 +152,14 @@ function screen () {
         case 6: showMotorLeds(); break
     }
 }
+// Safety check: if the drone has flipped over (tilted past 90 degrees), disable it
 function checkStability () {
     if (Math.abs(imuRoll) > FLIP_ANGLE_THRESHOLD && arm) {
         stable = false
     }
 }
+// Send the calculated motor speeds to the motor controller chip.
+// Only fly if: armed, stable, and both the gyroscope and motor controller are working.
 function updateMotors () {
     if (arm && stable && mcExists && gyroExists) {
         if (throttle == 0) {
@@ -135,6 +180,8 @@ function trackLoopTime () {
     cpuTime = input.runningTime() - startTime
     startTime = input.runningTime()
 }
+// The main flight loop — this runs hundreds of times per second.
+// Each cycle: read sensors, calculate angles, stabilize, and update motors.
 function mainLoop () {
     while (true) {
         airbit.readImuSensors()
@@ -155,6 +202,7 @@ input.onButtonPressed(Button.A, function () {
         mode = DISPLAY_MODE_COUNT - 1
     }
 })
+// Send telemetry (debug data) back to the remote controller over radio
 function radioSendData () {
     if (input.runningTime() - lastTelemetryTime < TELEMETRY_INTERVAL) return
     lastTelemetryTime = input.runningTime()
@@ -180,26 +228,33 @@ input.onButtonPressed(Button.B, function () {
         mode = 0
     }
 })
+// Process the pitch (forward/back tilt) command from the remote.
+// Expo makes small movements gentler. The value is clamped to the angle limit.
 function receivePitch (value: number) {
     pitch = expo(value) / PITCH_SCALE
     pitch = Math.constrain(pitch, -ANGLE_LIMIT, ANGLE_LIMIT)
 }
+// Process the roll (left/right tilt) command from the remote
 function receiveRoll (value: number) {
     roll = expo(value) / ROLL_SCALE
     roll = Math.constrain(roll, -ANGLE_LIMIT, ANGLE_LIMIT)
 }
+// Process the throttle (up/down power) command. If battery is low, limit the max power.
 function receiveThrottle (value: number) {
     throttle = Math.constrain(value, 0, MAX_THROTTLE)
     if (batterymVoltSmooth < LOW_BATTERY_VOLTAGE) {
         throttle = Math.constrain(throttle, 0, LOW_BATTERY_THROTTLE)
     }
 }
+// Arm or disarm the drone. "Arming" is like turning the ignition key in a car.
+// When re-armed, reset the stability flag so the drone can fly again.
 function receiveArm (value: number) {
     if (!arm && value) {
         stable = true
     }
     arm = value
 }
+// When the remote sends a radio command, figure out what it is and handle it
 radio.onReceivedValue(function (name, value) {
     radioReceivedTime = input.runningTime()
     switch (name) {
@@ -210,6 +265,7 @@ radio.onReceivedValue(function (name, value) {
         case "Y": yaw += value * YAW_SCALE; break
     }
 })
+// Default display: show joystick position as a dot, throttle bar on left, battery on right
 function showJoystickPosition () {
     basic.clearScreen()
     led.plot(Math.map(roll, -ANGLE_LIMIT, ANGLE_LIMIT, 0, 4), Math.map(pitch, -ANGLE_LIMIT, ANGLE_LIMIT, 4, 0))
@@ -225,6 +281,8 @@ function resetFlightInputs () {
     pitch = 0
     yaw = 0
 }
+// Failsafe: if we haven't heard from the remote in a while, the drone is on its own!
+// After 3 seconds: start descending slowly. After 8 seconds: turn off completely.
 function lostSignalCheck () {
     if (throttle <= FAILSAFE_THROTTLE || !arm) return
     const timeSinceLastSignal = input.runningTime() - radioReceivedTime
@@ -237,6 +295,7 @@ function lostSignalCheck () {
         throttle = FAILSAFE_THROTTLE
     }
 }
+// Test each motor one at a time with a spinning dot animation to verify they all work
 function motorTest () {
     motorA = 0
     motorB = 0
@@ -293,6 +352,7 @@ function motorTest () {
     motorA = 0
     motorTesting = false
 }
+// Play sounds at different battery levels to warn the pilot
 function sounds () {
     if (arm && soundStage == 0) {
         soundExpression.giggle.playUntilDone()
@@ -307,6 +367,9 @@ function sounds () {
         soundStage = 3
     }
 }
+// Expo curve: makes the joystick less sensitive near the center.
+// Small movements = very small changes (precise control).
+// Big movements = big changes (fast response).
 function expo (inp: number) {
     if (inp >= 0) {
         return inp / expoSetting + inp * inp / expoFactor
@@ -315,25 +378,33 @@ function expo (inp: number) {
     }
 }
 // --- Flight Input State ---
-let roll = 0
-let pitch = 0
-let yaw = 0
-let throttle = 0
-let arm = 0
+// These are the commands the pilot sends from the remote controller
+let roll = 0       // Left/right tilt angle requested by the pilot
+let pitch = 0      // Forward/back tilt angle requested by the pilot
+let yaw = 0        // Spin direction requested by the pilot
+let throttle = 0   // Motor power (0-100%)
+let arm = 0        // 0 = motors disabled (safe), 1 = motors enabled (ready to fly)
 
 // --- Motor Output ---
-let motorA = 0
-let motorB = 0
-let motorC = 0
-let motorD = 0
+// The speed of each motor (0-255), calculated by the stabilization algorithm
+let motorA = 0     // Back-left
+let motorB = 0     // Front-left
+let motorC = 0     // Back-right
+let motorD = 0     // Front-right
 let motorTesting = false
 
 // --- IMU Angles ---
-let imuRoll = 0
-let imuPitch = 0
-let imuYaw = 0
+// The actual angles the drone is tilted at right now, measured by the gyroscope
+let imuRoll = 0    // Actual left/right tilt (degrees)
+let imuPitch = 0   // Actual forward/back tilt (degrees)
+let imuYaw = 0     // Actual spin angle (degrees)
 
 // --- PID Tuning Parameters ---
+// PID stands for Proportional, Integral, Derivative — it's a control algorithm.
+// Think of it like balancing a ball on a plate:
+//   P (Proportional) = how hard you tilt the plate when the ball is off-center
+//   I (Integral)     = if the ball keeps drifting one way, gradually push harder
+//   D (Derivative)   = if the ball is moving fast, slow down the correction
 let rollPitchP = 0.9
 let rollPitchI = 0.004
 let rollPitchD = 15
@@ -345,33 +416,50 @@ let expoSetting = 2
 let expoFactor = EXPO_BASE * EXPO_BASE / (EXPO_BASE - EXPO_BASE / expoSetting)
 
 // --- Battery ---
+// Smoothed battery voltage to avoid jumpy readings (millivolts)
 let batterymVoltSmooth = 3700
 
 // --- Hardware Status ---
-let mcExists = false
-let gyroExists = false
-let stable = true
+let mcExists = false    // Motor controller chip found?
+let gyroExists = false  // Gyroscope sensor found?
+let stable = true       // Is the drone right-side up?
 
 // --- Display ---
-let mode = 0
-let soundStage = 0
+let mode = 0         // Which screen to show (cycle with A/B buttons)
+let soundStage = 0   // Tracks which battery warning sound was last played
 
 // --- Timing ---
 let startTime = 0
 let cpuTime = 0
 let radioReceivedTime = 0
 let lastTelemetryTime = 0
+
+// ============================================================================
+// STARTUP SEQUENCE
+// ============================================================================
+// Set up the radio so we can talk to the remote controller
 radio.setGroup(RADIO_GROUP)
+// Tell the micro:bit which pins are used for I2C communication with the sensors
 i2crr.setI2CPins(DigitalPin.P2, DigitalPin.P1)
+// Wake up and test the gyroscope (shows "G" if found)
 basic.pause(100)
 airbit.startImu()
+// Wake up and test the motor controller (shows "M" if found)
 basic.pause(100)
 airbit.startMotorController()
+// Calibrate the gyroscope — the drone must be sitting still on a flat surface!
+// (shows "C" while calibrating, then a checkmark when done)
 basic.pause(100)
 airbit.calibrateGyro()
+// Safety: don't start if the drone was accidentally left armed
 while (arm) {
     basic.showString("Disarm!")
 }
+// ============================================================================
+// FOREVER LOOPS — these run continuously after startup
+// ============================================================================
+
+// Display loop: show status on the LED screen
 basic.forever(function () {
     if (stable == false) {
         basic.showString("Tilted. Please reset.")
@@ -402,12 +490,15 @@ basic.forever(function () {
             `)
     }
 })
+// Telemetry loop: send debug data to the remote over radio
 basic.forever(function () {
     radioSendData()
 })
+// Battery loop: keep measuring the battery voltage
 basic.forever(function () {
     airbit.batteryCalculation()
 })
+// Flight loop: the core loop that reads sensors and controls the motors
 basic.forever(function () {
     mainLoop()
 })
