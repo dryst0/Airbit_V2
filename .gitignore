@@ -1,6 +1,7 @@
 # MakeCode
 built
 node_modules
+package-lock.json
 yotta_modules
 yotta_targets
 pxt_modules
