@@ -305,6 +305,14 @@ function lostSignalCheck () {
     }
 }
 // Test each motor one at a time with a spinning dot animation to verify they all work
+// Spin one motor while showing a rotating dot on the LED screen
+function testSingleMotor (dotX: number, dotY: number, rotationSpeed: number) {
+    for (let index = 0; index < MOTOR_TEST_ITERATIONS; index++) {
+        basic.clearScreen()
+        airbit.rotateDot(dotX, dotY, 1, rotationSpeed)
+        basic.pause(MOTOR_TEST_PAUSE)
+    }
+}
 function motorTest () {
     motorA = 0
     motorB = 0
@@ -312,52 +320,16 @@ function motorTest () {
     motorD = 0
     motorTesting = true
     motorB = MOTOR_TEST_SPEED
-    for (let index = 0; index < MOTOR_TEST_ITERATIONS; index++) {
-        basic.clearScreen()
-        airbit.rotateDot(
-        1,
-        1,
-        1,
-        10
-        )
-        basic.pause(MOTOR_TEST_PAUSE)
-    }
+    testSingleMotor(1, 1, 10)
     motorB = 0
     motorD = MOTOR_TEST_SPEED
-    for (let index = 0; index < MOTOR_TEST_ITERATIONS; index++) {
-        basic.clearScreen()
-        airbit.rotateDot(
-        3,
-        1,
-        1,
-        -10
-        )
-        basic.pause(MOTOR_TEST_PAUSE)
-    }
+    testSingleMotor(3, 1, -10)
     motorD = 0
     motorC = MOTOR_TEST_SPEED
-    for (let index = 0; index < MOTOR_TEST_ITERATIONS; index++) {
-        basic.clearScreen()
-        airbit.rotateDot(
-        3,
-        3,
-        1,
-        10
-        )
-        basic.pause(MOTOR_TEST_PAUSE)
-    }
+    testSingleMotor(3, 3, 10)
     motorC = 0
     motorA = MOTOR_TEST_SPEED
-    for (let index = 0; index < MOTOR_TEST_ITERATIONS; index++) {
-        basic.clearScreen()
-        airbit.rotateDot(
-        1,
-        3,
-        1,
-        -10
-        )
-        basic.pause(MOTOR_TEST_PAUSE)
-    }
+    testSingleMotor(1, 3, -10)
     motorA = 0
     motorTesting = false
 }
