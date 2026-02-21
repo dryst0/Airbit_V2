@@ -33,12 +33,11 @@ function testGroup(name: string) {
     serial.writeLine("--- " + name + " ---")
 }
 
-// --- PID Stabilization Tests ---
-// stabilize() reads these main.ts globals: roll, pitch, yaw, measuredRoll, measuredPitch, measuredYaw,
-// throttle, rollPitchP, rollPitchI, rollPitchD, yawP, yawD
-// stabilize() writes these main.ts globals: motorA, motorB, motorC, motorD
+// --- Drone Stabilization Tests ---
+// The stabilize() function reads the pilot's desired angles (roll, pitch, yaw),
+// compares them to the actual measured angles, and calculates motor speeds.
 
-testGroup("stabilize: zero error produces equal motor speeds")
+testGroup("when the drone is level, all motors spin at the same speed")
 
 airbit.resetPidState()
 measuredRoll = 0
@@ -57,12 +56,12 @@ yawD = 70
 airbit.stabilize()
 
 // With zero error, all corrections are 0. throttleScaled = 60 * 2.55 = 153
-assertEqual(motorA, 153, "Zero error: motorA should equal scaled throttle")
-assertEqual(motorB, 153, "Zero error: motorB should equal scaled throttle")
-assertEqual(motorC, 153, "Zero error: motorC should equal scaled throttle")
-assertEqual(motorD, 153, "Zero error: motorD should equal scaled throttle")
+assertEqual(motorA, 153, "level drone: back-left motor matches throttle")
+assertEqual(motorB, 153, "level drone: front-left motor matches throttle")
+assertEqual(motorC, 153, "level drone: back-right motor matches throttle")
+assertEqual(motorD, 153, "level drone: front-right motor matches throttle")
 
-testGroup("stabilize: roll error produces differential motor speeds")
+testGroup("when the drone tilts right, the left motors spin faster to correct")
 
 airbit.resetPidState()
 measuredRoll = 5
@@ -84,10 +83,10 @@ airbit.stabilize()
 // rollCorrection = -5*0.9 + 0 + -5*15 = -4.5 - 75 = -79.5
 // motorA = round(153 + (-79.5) + 0 + 0) = 74
 // motorC = round(153 - (-79.5) + 0 + 0) = 233
-assertTrue(motorA < motorC, "Roll right tilt: motorA (left) should be less than motorC (right)")
-assertTrue(motorB < motorD, "Roll right tilt: motorB (left) should be less than motorD (right)")
+assertTrue(motorA < motorC, "right tilt: back-left motor slower than back-right")
+assertTrue(motorB < motorD, "right tilt: front-left motor slower than front-right")
 
-testGroup("stabilize: motor speeds clamped to 0-255")
+testGroup("motor speeds stay within safe limits even with extreme tilt")
 
 airbit.resetPidState()
 measuredRoll = 15
@@ -105,18 +104,18 @@ yawD = 70
 
 airbit.stabilize()
 
-assertTrue(motorA >= 0, "Motor A clamped: not negative")
-assertTrue(motorA <= 255, "Motor A clamped: not over 255")
-assertTrue(motorB >= 0, "Motor B clamped: not negative")
-assertTrue(motorB <= 255, "Motor B clamped: not over 255")
-assertTrue(motorC >= 0, "Motor C clamped: not negative")
-assertTrue(motorC <= 255, "Motor C clamped: not over 255")
-assertTrue(motorD >= 0, "Motor D clamped: not negative")
-assertTrue(motorD <= 255, "Motor D clamped: not over 255")
+assertTrue(motorA >= 0, "back-left motor never goes below zero")
+assertTrue(motorA <= 255, "back-left motor never exceeds maximum")
+assertTrue(motorB >= 0, "front-left motor never goes below zero")
+assertTrue(motorB <= 255, "front-left motor never exceeds maximum")
+assertTrue(motorC >= 0, "back-right motor never goes below zero")
+assertTrue(motorC <= 255, "back-right motor never exceeds maximum")
+assertTrue(motorD >= 0, "front-right motor never goes below zero")
+assertTrue(motorD <= 255, "front-right motor never exceeds maximum")
 
 // --- Battery Level Tests ---
 
-testGroup("batteryLevel: maps voltage to percentage")
+testGroup("battery percentage matches the charge level")
 
 // batteryLevel() calls batteryCalculation() first (reads analog pin, applies smoothing).
 // On the simulator, analogReadPin returns 0, so batteryMillivoltsSmoothed converges toward 0.
@@ -126,22 +125,22 @@ testGroup("batteryLevel: maps voltage to percentage")
 // These values match BATTERY_VOLTAGE_MIN (3400) and BATTERY_VOLTAGE_MAX (4200) in custom.ts
 
 let expectedMin = Math.map(3400, 3400, 4200, 0, 100)
-assertEqual(expectedMin, 0, "Battery mapping: 3400mV should be 0%")
+assertEqual(expectedMin, 0, "empty battery reads as 0%")
 
 let expectedMax = Math.map(4200, 3400, 4200, 0, 100)
-assertEqual(expectedMax, 100, "Battery mapping: 4200mV should be 100%")
+assertEqual(expectedMax, 100, "full battery reads as 100%")
 
 let expectedMid = Math.map(3800, 3400, 4200, 0, 100)
-assertEqual(expectedMid, 50, "Battery mapping: 3800mV should be 50%")
+assertEqual(expectedMid, 50, "half-charged battery reads as 50%")
 
-// --- resetPidState Tests ---
-// resetPidState() resets PID accumulators. We can verify it resets measuredYaw (a main.ts global).
+// --- Stabilization Reset Tests ---
+// Resetting stabilization clears all accumulated corrections and the measured spin angle.
 
-testGroup("resetPidState: resets measuredYaw to zero")
+testGroup("when stabilization is reset, the measured spin angle returns to zero")
 
 measuredYaw = 45
 airbit.resetPidState()
-assertEqual(measuredYaw, 0, "resetPidState should reset measuredYaw to 0")
+assertEqual(measuredYaw, 0, "after reset, measured spin angle is zero")
 
 // --- All Tests Passed ---
 
