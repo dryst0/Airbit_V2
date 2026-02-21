@@ -123,6 +123,7 @@ testGroup("batteryLevel: maps voltage to percentage")
 // We can set batterymVoltSmooth directly and test the mapping by calling batteryLevel().
 // Note: batteryLevel() calls batteryCalculation() which will modify batterymVoltSmooth.
 // So we test the math directly: Math.map(voltage, 3400, 4200, 0, 100)
+// These values match BATTERY_VOLTAGE_MIN (3400) and BATTERY_VOLTAGE_MAX (4200) in custom.ts
 
 let expectedMin = Math.map(3400, 3400, 4200, 0, 100)
 assertEqual(expectedMin, 0, "Battery mapping: 3400mV should be 0%")

@@ -39,19 +39,19 @@ namespace airbit {
     export function baroStart() {
         // Soft reset
         pins.i2cWriteNumber(
-            BARO_REG_SLAVEADR,
-            32861,
+            BARO_ADDRESS,
+            BARO_CMD_SOFT_RESET,
             NumberFormat.UInt16BE,
             true
         )
         basic.pause(10)
         pins.i2cWriteNumber(
-            BARO_REG_SLAVEADR,
-            61384,
+            BARO_ADDRESS,
+            BARO_CMD_READ_ID,
             NumberFormat.UInt16BE,
             true
         )
-        BARO_return = pins.i2cReadNumber(BARO_REG_SLAVEADR, NumberFormat.UInt16LE, true)
+        BARO_return = pins.i2cReadNumber(BARO_ADDRESS, NumberFormat.UInt16LE, true)
         if (BARO_return) {
             basic.showString("B")
         } else {
@@ -98,7 +98,7 @@ namespace airbit {
 
     export function batteryLevel() {
         batteryCalculation()
-        return Math.map(batterymVoltSmooth, 3400, 4200, 0, 100)
+        return Math.map(batterymVoltSmooth, BATTERY_VOLTAGE_MIN, BATTERY_VOLTAGE_MAX, 0, 100)
     }
 
 
@@ -111,7 +111,7 @@ namespace airbit {
     //% group='Battery management'
 
     export function batteryCalculation() {
-        batterymVoltSmooth = Math.round(pins.analogReadPin(AnalogPin.P0) * BATTERY_FACTOR * 0.1 + batterymVoltSmooth * 0.9)
+        batterymVoltSmooth = Math.round(pins.analogReadPin(AnalogPin.P0) * BATTERY_FACTOR * BATTERY_SMOOTHING_NEW + batterymVoltSmooth * BATTERY_SMOOTHING_OLD)
 
     }
 
@@ -141,12 +141,12 @@ namespace airbit {
 
     export function readPCA(num: number) {
         pins.i2cWriteNumber(
-            PCA_REG_SLAVEADR,
+            PCA_ADDRESS,
             num,
             NumberFormat.UInt8BE,
             true
         )
-        return pins.i2cReadNumber(PCA_REG_SLAVEADR, NumberFormat.UInt8BE, false)
+        return pins.i2cReadNumber(PCA_ADDRESS, NumberFormat.UInt8BE, false)
     }
 
 
@@ -170,14 +170,14 @@ namespace airbit {
     export function calculateAngles() {
         looptime = input.runningTime() - oldTime
         oldTime = input.runningTime()
-        accPitch = (-57.295 * Math.atan2(accY, accZ)) - accPitchOffset
-        accRoll = (-57.295 * Math.atan2(accX, accZ)) - accRollOffset
+        accPitch = (-RAD_TO_DEG * Math.atan2(accY, accZ)) - accPitchOffset
+        accRoll = (-RAD_TO_DEG * Math.atan2(accX, accZ)) - accRollOffset
         // Degrees away from desired angle
-        gyroXdelta = (gyroX - gyroXcalibration) * looptime * -0.00000762939
-        gyroYdelta = (gyroY - gyroYcalibration) * looptime * 0.00000762939
-        gyroZdelta = (gyroZ - gyroZcalibration) * looptime * -0.00000762939
-        imuRoll = (gyroYdelta + imuRoll) * 0.99 + accRoll * 0.01
-        imuPitch = (gyroXdelta + imuPitch) * 0.99 + accPitch * 0.01
+        gyroXdelta = (gyroX - gyroXcalibration) * looptime * -GYRO_SCALE_FACTOR
+        gyroYdelta = (gyroY - gyroYcalibration) * looptime * GYRO_SCALE_FACTOR
+        gyroZdelta = (gyroZ - gyroZcalibration) * looptime * -GYRO_SCALE_FACTOR
+        imuRoll = (gyroYdelta + imuRoll) * COMPLEMENTARY_GYRO_WEIGHT + accRoll * COMPLEMENTARY_ACC_WEIGHT
+        imuPitch = (gyroXdelta + imuPitch) * COMPLEMENTARY_GYRO_WEIGHT + accPitch * COMPLEMENTARY_ACC_WEIGHT
         imuYaw = gyroZdelta + imuYaw
     }
 
@@ -216,26 +216,26 @@ namespace airbit {
 
     export function MotorSpeed(m0: number, m1: number, m2: number, m3: number) {
         pins.i2cWriteNumber(
-            PCA_REG_SLAVEADR,
-            PCA_pwm0 << 8 | m3,
+            PCA_ADDRESS,
+            PCA_PWM0 << 8 | m3,
             NumberFormat.UInt16BE,
             false
         )
         pins.i2cWriteNumber(
-            PCA_REG_SLAVEADR,
-            PCA_pwm1 << 8 | m2,
+            PCA_ADDRESS,
+            PCA_PWM1 << 8 | m2,
             NumberFormat.UInt16BE,
             false
         )
         pins.i2cWriteNumber(
-            PCA_REG_SLAVEADR,
-            PCA_pwm2 << 8 | m1,
+            PCA_ADDRESS,
+            PCA_PWM2 << 8 | m1,
             NumberFormat.UInt16BE,
             false
         )
         pins.i2cWriteNumber(
-            PCA_REG_SLAVEADR,
-            PCA_pwm3 << 8 | m0,
+            PCA_ADDRESS,
+            PCA_PWM3 << 8 | m0,
             NumberFormat.UInt16BE,
             false
         )
@@ -253,19 +253,19 @@ namespace airbit {
     export function IMU_Start() {
         // Full reset chip (H_RESET, internal 20MHz clock)
         pins.i2cWriteNumber(
-            IMU_REG_ADDRESS,
+            IMU_ADDRESS,
             IMU_PWR_MGMT_1 << 8 | 0x80,
             NumberFormat.UInt16BE,
             false
         )
         basic.pause(500)
         pins.i2cWriteNumber(
-            IMU_REG_ADDRESS,
+            IMU_ADDRESS,
             IMU_WHO_AM_I,
             NumberFormat.UInt8BE,
             true
         )
-        gyroReturnId = pins.i2cReadNumber(IMU_REG_ADDRESS, NumberFormat.Int16BE, false)
+        gyroReturnId = pins.i2cReadNumber(IMU_ADDRESS, NumberFormat.Int16BE, false)
         // basic.showNumber(IMU_Return >> 8)
         basic.clearScreen()
         if (gyroReturnId >> 8 > 0) {
@@ -277,34 +277,34 @@ namespace airbit {
         }
         // set clock to internal PLL
         pins.i2cWriteNumber(
-            IMU_REG_ADDRESS,
+            IMU_ADDRESS,
             IMU_PWR_MGMT_1 << 8 | 0x01,
             NumberFormat.UInt16BE,
             false
         )
         pins.i2cWriteNumber(
-            IMU_REG_ADDRESS,
+            IMU_ADDRESS,
             IMU_SIGNAL_PATH_RESET << 8 | 0x07,
             NumberFormat.UInt16BE,
             false
         )
         // Disable FIFO
         pins.i2cWriteNumber(
-            IMU_REG_ADDRESS,
+            IMU_ADDRESS,
             IMU_USER_CTRL << 8 | 0x00,
             NumberFormat.UInt16BE,
             false
         )
         // Gyro filter setting to 0 (250 Hz), 1 (176 Hz),  2 (92 Hz), 3 (41 Hz)
         pins.i2cWriteNumber(
-            IMU_REG_ADDRESS,
+            IMU_ADDRESS,
             IMU_REG_CONFIG << 8 | 0,
             NumberFormat.UInt16BE,
             false
         )
         // Acc filter setting to 3 (44.8 Hz), 4 (21,2 Hz), 5 (10.2 Hz)
         pins.i2cWriteNumber(
-            IMU_REG_ADDRESS,
+            IMU_ADDRESS,
             IMU_ACCEL_CONFIG_2 << 8 | 5,
             NumberFormat.UInt16BE,
             false
@@ -323,7 +323,7 @@ namespace airbit {
 
     export function PCA_Write(register: number, value: number) {
         pins.i2cWriteNumber(
-            PCA_REG_SLAVEADR,
+            PCA_ADDRESS,
             register << 8 | value,
             NumberFormat.UInt16BE,
             false
@@ -341,35 +341,26 @@ namespace airbit {
 
     export function IMU_sensorRead() {
         pins.i2cWriteNumber(
-            IMU_REG_ADDRESS,
-            67,
+            IMU_ADDRESS,
+            IMU_REG_GYRO_XOUT_H,
             NumberFormat.Int8LE,
             true
         )
-        gyroX = pins.i2cReadNumber(104, NumberFormat.Int16BE, true)
-        gyroY = pins.i2cReadNumber(104, NumberFormat.Int16BE, true)
-        gyroZ = pins.i2cReadNumber(104, NumberFormat.Int16BE, false)
+        gyroX = pins.i2cReadNumber(IMU_ADDRESS, NumberFormat.Int16BE, true)
+        gyroY = pins.i2cReadNumber(IMU_ADDRESS, NumberFormat.Int16BE, true)
+        gyroZ = pins.i2cReadNumber(IMU_ADDRESS, NumberFormat.Int16BE, false)
         pins.i2cWriteNumber(
-            104,
-            59,
+            IMU_ADDRESS,
+            IMU_REG_ACCEL_XOUT_H,
             NumberFormat.Int8LE,
             true
         )
-        accX = pins.i2cReadNumber(104, NumberFormat.Int16BE, true)
-        accY = pins.i2cReadNumber(104, NumberFormat.Int16BE, true)
-        accZ = pins.i2cReadNumber(104, NumberFormat.Int16BE, false)
+        accX = pins.i2cReadNumber(IMU_ADDRESS, NumberFormat.Int16BE, true)
+        accY = pins.i2cReadNumber(IMU_ADDRESS, NumberFormat.Int16BE, true)
+        accZ = pins.i2cReadNumber(IMU_ADDRESS, NumberFormat.Int16BE, false)
     }
 
 
-
-    // Mode2:
-    // Totem pole:
-    // Inverted = %10101(21)
-    // Non-inverted = %00101(5)
-    // 
-    // Open Drain:
-    // Inverted = %10001(17)
-    // Non-inverted = %00001(1)
 
     /**
     * Setup motor controller
@@ -380,21 +371,19 @@ namespace airbit {
     //% group='Control'
 
     export function PCA_Start() {
-        PCA_Write(PCA_REG_MODE1, 128)
-        PCA_Write(PCA_REG_MODE2, PCA_REG_MODE2_CONFIG)
-        // Mode2:Inverted, Totem pole on = %10101(21), Non-inverted = %00101(5)
-        // Mode2:Inverted, Open drain = %10001(17), Non-inverted = %00001(1)
-        PCA_Write(PCA_REG_LEDUOT, 170)
+        PCA_Write(PCA_REG_MODE1, PCA_RESET)
+        PCA_Write(PCA_REG_MODE2, PCA_MODE2_CONFIG)
+        PCA_Write(PCA_REG_LEDOUT, PCA_LEDOUT_INDIVIDUAL)
 
         MotorSpeed(0, 0, 0, 0)     // Zero out motor speed 
         // Self test to see if data reg can be read.
         pins.i2cWriteNumber(
-            PCA_REG_SLAVEADR,
+            PCA_ADDRESS,
             PCA_REG_MODE2,
             NumberFormat.UInt8BE,
             true
         )
-        mcReturnId = pins.i2cReadNumber(PCA_REG_SLAVEADR, NumberFormat.UInt8BE, false)
+        mcReturnId = pins.i2cReadNumber(PCA_ADDRESS, NumberFormat.UInt8BE, false)
         basic.clearScreen()
         if (mcReturnId) {
             basic.showString("M")
@@ -420,18 +409,18 @@ namespace airbit {
         gyroYcalibration = 0
         gyroZcalibration = 0
         basic.showString("C")
-        for (let index = 0; index < 100; index++) {
+        for (let index = 0; index < GYRO_CALIBRATION_SAMPLES; index++) {
             IMU_sensorRead()
             gyroXcalibration += gyroX
             gyroYcalibration += gyroY
             gyroZcalibration += gyroZ
             basic.pause(5)
         }
-        gyroXcalibration = gyroXcalibration / 100
-        gyroYcalibration = gyroYcalibration / 100
-        gyroZcalibration = gyroZcalibration / 100
-        accPitch = -57.295 * Math.atan2(accY, accZ)
-        accRoll = -57.295 * Math.atan2(accX, accZ)
+        gyroXcalibration = gyroXcalibration / GYRO_CALIBRATION_SAMPLES
+        gyroYcalibration = gyroYcalibration / GYRO_CALIBRATION_SAMPLES
+        gyroZcalibration = gyroZcalibration / GYRO_CALIBRATION_SAMPLES
+        accPitch = -RAD_TO_DEG * Math.atan2(accY, accZ)
+        accRoll = -RAD_TO_DEG * Math.atan2(accX, accZ)
         accPitchOffset = accPitch
         accRollOffset = accRoll
 
@@ -463,33 +452,23 @@ namespace airbit {
         lastPitchDiff = pitchDiff
         lastYawDiff = yawDiff
 
-        let iRange = 5      //  Maximal error that will increase Roll and Pitch integral
-        let iLimit = 4      //  Maximal correcton that can be added by integral
-        let yawLimit = 50   //  Maximal yaw correction 
-       
-        if (throttle > 50) {    // Prevent windup before flight
-
-            if (rollDiff > - iRange && rollDiff < iRange ){
+        if (throttle > INTEGRAL_THROTTLE_THRESHOLD) {
+            if (rollDiff > -INTEGRAL_RANGE && rollDiff < INTEGRAL_RANGE) {
                 rollIdiff += rollDiff
             }
-            if (pitchDiff > - iRange && pitchDiff < iRange) {
+            if (pitchDiff > -INTEGRAL_RANGE && pitchDiff < INTEGRAL_RANGE) {
                 pitchIdiff += pitchDiff
             }
-
         }
 
-        let rollIcorrection = rollIdiff * rollPitchI
-        let pitchIcorrection = pitchIdiff * rollPitchI
+        let rollIcorrection = Math.constrain(rollIdiff * rollPitchI, -INTEGRAL_LIMIT, INTEGRAL_LIMIT)
+        let pitchIcorrection = Math.constrain(pitchIdiff * rollPitchI, -INTEGRAL_LIMIT, INTEGRAL_LIMIT)
 
-        rollIcorrection = Math.constrain(rollIcorrection, -iLimit, iLimit)     // Limit I (preventing it from growing out of proportions)
-        pitchIcorrection = Math.constrain(pitchIcorrection, -iLimit, iLimit)
-
-     
         rollCorrection = rollDiff * rollPitchP + rollIcorrection + rollDdiff * rollPitchD
         pitchCorrection = pitchDiff * rollPitchP + pitchIcorrection + pitchDdiff * rollPitchD
         yawCorrection = yawDiff * yawP + yawDdiff * yawD
-        yawCorrection = Math.constrain(yawCorrection, -yawLimit, yawLimit)
-        throttleScaled = throttle * 2.55
+        yawCorrection = Math.constrain(yawCorrection, -YAW_CORRECTION_LIMIT, YAW_CORRECTION_LIMIT)
+        throttleScaled = throttle * THROTTLE_SCALE
 
         motorA = Math.round(throttleScaled + rollCorrection + pitchCorrection + yawCorrection)
         motorB = Math.round(throttleScaled + rollCorrection - pitchCorrection - yawCorrection)
@@ -516,73 +495,105 @@ namespace airbit {
 
     export function PCA_ReadMode1() {
         pins.i2cWriteNumber(
-            PCA_REG_SLAVEADR,
+            PCA_ADDRESS,
             PCA_REG_MODE1,
             NumberFormat.UInt8BE,
             true
         )
-        return pins.i2cReadNumber(PCA_REG_SLAVEADR, NumberFormat.UInt8BE, false)
+        return pins.i2cReadNumber(PCA_ADDRESS, NumberFormat.UInt8BE, false)
     }
 
 
+    // --- IMU (Gyro/Accelerometer) Register Addresses ---
+    const IMU_ADDRESS = 104
+    const IMU_REG_CONFIG = 1
+    const IMU_PWR_MGMT_1 = 107
+    const IMU_WHO_AM_I = 117
+    const IMU_SIGNAL_PATH_RESET = 105
+    const IMU_USER_CTRL = 106
+    const IMU_ACCEL_CONFIG_2 = 29
+    const IMU_REG_GYRO_XOUT_H = 67
+    const IMU_REG_ACCEL_XOUT_H = 59
+
+    // --- IMU Sensor Fusion Constants ---
+    const RAD_TO_DEG = 57.295
+    const GYRO_SCALE_FACTOR = 0.00000762939
+    const COMPLEMENTARY_GYRO_WEIGHT = 0.99
+    const COMPLEMENTARY_ACC_WEIGHT = 0.01
+    const GYRO_CALIBRATION_SAMPLES = 100
+
+    // --- Motor Controller (PCA9685) Register Addresses ---
+    const PCA_ADDRESS = 98
+    const PCA_REG_MODE1 = 0
+    const PCA_REG_MODE2 = 1
+    const PCA_REG_LEDOUT = 8
+    const PCA_PWM0 = 2
+    const PCA_PWM1 = 3
+    const PCA_PWM2 = 4
+    const PCA_PWM3 = 5
+    const PCA_RESET = 128
+    const PCA_LEDOUT_INDIVIDUAL = 170
+    const PCA_MODE2_CONFIG = 5  // Non-inverted, Totem pole
+
+    // --- Barometer Register Addresses ---
+    const BARO_ADDRESS = 99
+    const BARO_CMD_SOFT_RESET = 32861
+    const BARO_CMD_READ_ID = 61384
+
+    // --- Battery Constants ---
+    const BATTERY_FACTOR = 5.94
+    const BATTERY_VOLTAGE_MIN = 3400
+    const BATTERY_VOLTAGE_MAX = 4200
+    const BATTERY_SMOOTHING_NEW = 0.1
+    const BATTERY_SMOOTHING_OLD = 0.9
+
+    // --- PID Constants ---
+    const INTEGRAL_RANGE = 5
+    const INTEGRAL_LIMIT = 4
+    const YAW_CORRECTION_LIMIT = 50
+    const INTEGRAL_THROTTLE_THRESHOLD = 50
+    const THROTTLE_SCALE = 2.55
+
+    // --- IMU Sensor State ---
     let gyroReturnId = 0
     let mcReturnId = 0
-    let throttleScaled = 0
-    let yawCorrection = 0
-    let pitchCorrection = 0
-    let rollCorrection = 0
-    let lastYawDiff = 0
-    let pitchDdiff = 0
-    let pitchDiff = 0
-    let rollDiff = 0
-    let accRollOffset = 0  //  Calibration offset of the Roll
-    let accPitchOffset = 0  //  Calibration offset of the Pitch
-    let oldTime = 0
-    let yawIdiff = 0
-    let yawDiff = 0
-    let rollDdiff = 0
-    let lastPitchDiff = 0
-    let lastRollDiff = 0
-    let pitchIdiff = 0
-    let rollIdiff = 0
-    let yawDdiff = 0
-    let gyroZcalibration = 0
+    let BARO_return = 0
+    let gyroX = 0
+    let gyroY = 0
     let gyroZ = 0
+    let gyroXdelta = 0
+    let gyroYdelta = 0
     let gyroZdelta = 0
     let gyroXcalibration = 0
-    let gyroX = 0
-    let gyroXdelta = 0
-    let looptime = 0
     let gyroYcalibration = 0
-    let gyroY = 0
-    let gyroYdelta = 0
-    let accY = 0
-    let accRoll = 0
-    let accZ = 0
+    let gyroZcalibration = 0
     let accX = 0
+    let accY = 0
+    let accZ = 0
     let accPitch = 0
-    let BATTERY_FACTOR = 5.94
+    let accRoll = 0
+    let accPitchOffset = 0
+    let accRollOffset = 0
+    let looptime = 0
+    let oldTime = 0
 
-
-    let PCA_REG_LEDUOT = 8
-    let PCA_REG_SLAVEADR = 98
-    let PCA_REG_MODE1 = 0
-    let PCA_REG_MODE2 = 1
-    let PCA_pwm0 = 2
-    let PCA_pwm1 = 3
-    let PCA_pwm2 = 4
-    let PCA_pwm3 = 5
-    let BARO_return = 0
-    let PCA_REG_MODE2_CONFIG = 5        // Non-inverted: Open Drain: = %00001(1), Totem: = %00101(5), Inverted: Totem = %10101(21), Open drain: = %10001(17)
-
-    let IMU_REG_CONFIG = 1          // 0x6b
-    let IMU_PWR_MGMT_1 = 107        // 0x6b
-    let IMU_WHO_AM_I = 117              // 0x68
-    let IMU_SIGNAL_PATH_RESET = 105 // 0x6a
-    let IMU_USER_CTRL = 106
-    let IMU_ACCEL_CONFIG_2 = 29
-    let IMU_REG_ADDRESS = 104
-    let BARO_REG_SLAVEADR = 99
+    // --- PID Calculation State ---
+    let throttleScaled = 0
+    let rollCorrection = 0
+    let pitchCorrection = 0
+    let yawCorrection = 0
+    let rollDiff = 0
+    let pitchDiff = 0
+    let yawDiff = 0
+    let lastRollDiff = 0
+    let lastPitchDiff = 0
+    let lastYawDiff = 0
+    let rollDdiff = 0
+    let pitchDdiff = 0
+    let yawDdiff = 0
+    let rollIdiff = 0
+    let pitchIdiff = 0
+    let yawIdiff = 0
 
 
 
