@@ -4,9 +4,11 @@
   "description": "> Open this page at [https://gomakekit.github.io/airbit_v2/](https://gomakekit.github.io/airbit_v2/)",
   "main": "index.js",
   "scripts": {
-    "build": "mkc build",
-    "clean": "mkc clean",
-    "serve": "mkc serve"
+    "build": "pxt build",
+    "clean": "pxt clean",
+    "serve": "pxt serve",
+    "test": "pxt test",
+    "deploy": "pxt deploy"
   },
   "repository": {
     "type": "git",
@@ -21,6 +23,8 @@
   },
   "homepage": "https://github.com/gomakekit/Airbit_V2#readme",
   "devDependencies": {
-    "makecode": "^1.3.5"
+    "makecode": "^1.3.5",
+    "pxt": "^0.5.1",
+    "pxt-microbit": "^8.1.6"
   }
 }

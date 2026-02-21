@@ -1,10 +1,10 @@
 all: deploy
 
 build:
-	pxt build
+	npx pxt build
 
 deploy:
-	pxt deploy
+	npx pxt deploy
 
 test:
-	pxt test
+	npx pxt test
