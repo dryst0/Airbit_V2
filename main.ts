@@ -91,29 +91,29 @@ function showChargingAnimation () {
     if (pins.analogReadPin(AnalogPin.P0) > CHARGING_COMPLETE_THRESHOLD) {
         basic.showIcon(IconNames.Yes)
         basic.showString("Charging finished!")
-    } else {
-        basic.showLeds(`
-            . . # . .
-            . # # # .
-            . # . # .
-            . # . # .
-            . # # # .
-            `)
-        basic.showLeds(`
-            . . # . .
-            . # # # .
-            . # . # .
-            . # # # .
-            . # # # .
-            `)
-        basic.showLeds(`
-            . . # . .
-            . # # # .
-            . # # # .
-            . # # # .
-            . # # # .
-            `)
+        return
     }
+    basic.showLeds(`
+        . . # . .
+        . # # # .
+        . # . # .
+        . # . # .
+        . # # # .
+        `)
+    basic.showLeds(`
+        . . # . .
+        . # # # .
+        . # . # .
+        . # # # .
+        . # # # .
+        `)
+    basic.showLeds(`
+        . . # . .
+        . # # # .
+        . # # # .
+        . # # # .
+        . # # # .
+        `)
 }
 function showBatteryBar () {
     led.plotBarGraph(airbit.batteryLevel(), 100)
@@ -161,20 +161,21 @@ function checkStability () {
 // Send the calculated motor speeds to the motor controller chip.
 // Only fly if: armed, stable, and both the gyroscope and motor controller are working.
 function updateMotors () {
-    if (arm && stable && mcExists && gyroExists) {
-        if (throttle == 0) {
-            airbit.setMotorSpeeds(MOTOR_IDLE_SPEED, MOTOR_IDLE_SPEED, MOTOR_IDLE_SPEED, MOTOR_IDLE_SPEED)
-        } else {
-            airbit.setMotorSpeeds(motorA, motorB, motorC, motorD)
-        }
-    } else {
+    if (!arm || !stable || !mcExists || !gyroExists) {
         airbit.resetPidState()
         if (motorTesting) {
             airbit.setMotorSpeeds(motorA, motorB, motorC, motorD)
-        } else {
+        }
+        if (!motorTesting) {
             airbit.setMotorSpeeds(0, 0, 0, 0)
         }
+        return
     }
+    if (throttle == 0) {
+        airbit.setMotorSpeeds(MOTOR_IDLE_SPEED, MOTOR_IDLE_SPEED, MOTOR_IDLE_SPEED, MOTOR_IDLE_SPEED)
+        return
+    }
+    airbit.setMotorSpeeds(motorA, motorB, motorC, motorD)
 }
 function trackLoopTime () {
     cpuTime = input.runningTime() - startTime
@@ -290,7 +291,9 @@ function lostSignalCheck () {
         resetFlightInputs()
         throttle = 0
         arm = 0
-    } else if (timeSinceLastSignal > FAILSAFE_TIMEOUT_DESCEND) {
+        return
+    }
+    if (timeSinceLastSignal > FAILSAFE_TIMEOUT_DESCEND) {
         resetFlightInputs()
         throttle = FAILSAFE_THROTTLE
     }
@@ -373,9 +376,8 @@ function sounds () {
 function expo (inp: number) {
     if (inp >= 0) {
         return inp / expoSetting + inp * inp / expoFactor
-    } else {
-        return inp / expoSetting - inp * inp / expoFactor
     }
+    return inp / expoSetting - inp * inp / expoFactor
 }
 // --- Flight Input State ---
 // These are the commands the pilot sends from the remote controller
@@ -459,36 +461,44 @@ while (arm) {
 // FOREVER LOOPS — these run continuously after startup
 // ============================================================================
 
+// Show the right thing on the LED screen based on battery level and stability
+function updateDisplay () {
+    if (!stable) {
+        basic.showString("Tilted. Please reset.")
+        return
+    }
+    if (batterymVoltSmooth > NORMAL_BATTERY_VOLTAGE) {
+        screen()
+        return
+    }
+    if (batterymVoltSmooth > LOW_BATTERY_VOLTAGE) {
+        basic.showLeds(`
+            . . # . .
+            . # . # .
+            . # . # .
+            . # . # .
+            . # # # .
+            `)
+        return
+    }
+    basic.showLeds(`
+        . . # . .
+        . # . # .
+        . # . # .
+        . # . # .
+        . # # # .
+        `)
+    basic.showLeds(`
+        . . . . .
+        . . . . .
+        . . . . .
+        . . . . .
+        . . . . .
+        `)
+}
 // Display loop: show status on the LED screen
 basic.forever(function () {
-    if (stable == false) {
-        basic.showString("Tilted. Please reset.")
-    } else if (batterymVoltSmooth > NORMAL_BATTERY_VOLTAGE) {
-        screen()
-    } else if (batterymVoltSmooth > LOW_BATTERY_VOLTAGE) {
-        basic.showLeds(`
-            . . # . .
-            . # . # .
-            . # . # .
-            . # . # .
-            . # # # .
-            `)
-    } else {
-        basic.showLeds(`
-            . . # . .
-            . # . # .
-            . # . # .
-            . # . # .
-            . # # # .
-            `)
-        basic.showLeds(`
-            . . . . .
-            . . . . .
-            . . . . .
-            . . . . .
-            . . . . .
-            `)
-    }
+    updateDisplay()
 })
 // Telemetry loop: send debug data to the remote over radio
 basic.forever(function () {

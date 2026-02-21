@@ -58,11 +58,11 @@ namespace airbit {
             true
         )
         BARO_return = pins.i2cReadNumber(BARO_ADDRESS, NumberFormat.UInt16LE, true)
-        if (BARO_return) {
-            basic.showString("B")
-        } else {
+        if (!BARO_return) {
             basic.showString("No Baro", 50)
+            return
         }
+        basic.showString("B")
     }
 
 
@@ -240,13 +240,13 @@ namespace airbit {
         pins.i2cWriteNumber(IMU_ADDRESS, IMU_WHO_AM_I, NumberFormat.UInt8BE, true)
         gyroReturnId = pins.i2cReadNumber(IMU_ADDRESS, NumberFormat.Int16BE, false)
         basic.clearScreen()
-        if (gyroReturnId >> 8 > 0) {
-            basic.showString("G")
-            gyroExists = true
-        } else {
+        if (!(gyroReturnId >> 8 > 0)) {
             basic.showString("NG", 50)
             gyroExists = false
+            return
         }
+        basic.showString("G")
+        gyroExists = true
         writeImuRegister(IMU_PWR_MGMT_1, 0x01)           // Set clock to internal PLL
         writeImuRegister(IMU_SIGNAL_PATH_RESET, 0x07)     // Reset signal paths
         writeImuRegister(IMU_USER_CTRL, 0x00)             // Disable FIFO
@@ -318,13 +318,13 @@ namespace airbit {
         )
         mcReturnId = pins.i2cReadNumber(PCA_ADDRESS, NumberFormat.UInt8BE, false)
         basic.clearScreen()
-        if (mcReturnId) {
-            basic.showString("M")
-            mcExists = true
-        } else {
+        if (!mcReturnId) {
             basic.showString("No PCA!", 50)
             mcExists = false
+            return
         }
+        basic.showString("M")
+        mcExists = true
     }
 
 
