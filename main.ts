@@ -156,6 +156,8 @@ input.onButtonPressed(Button.A, function () {
     }
 })
 function radioSendData () {
+    if (input.runningTime() - lastTelemetryTime < TELEMETRY_INTERVAL) return
+    lastTelemetryTime = input.runningTime()
     radio.sendValue("p", rollPitchP)
     radio.sendValue("i", rollPitchI)
     radio.sendValue("d", rollPitchD)
@@ -165,7 +167,6 @@ function radioSendData () {
     radio.sendValue("yd", yawD)
     radio.sendValue("v", batterymVoltSmooth)
     radio.sendValue("p0", pins.analogReadPin(AnalogPin.P0))
-    basic.pause(TELEMETRY_INTERVAL)
 }
 input.onButtonPressed(Button.AB, function () {
     mode = 0
@@ -359,6 +360,7 @@ let soundStage = 0
 let startTime = 0
 let cpuTime = 0
 let radioReceivedTime = 0
+let lastTelemetryTime = 0
 radio.setGroup(RADIO_GROUP)
 i2crr.setI2CPins(DigitalPin.P2, DigitalPin.P1)
 basic.pause(100)

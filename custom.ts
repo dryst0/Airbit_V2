@@ -151,14 +151,6 @@ namespace airbit {
 
 
 
-    export function radioSend() {
-        radio.sendValue("B", batterymVoltSmooth)
-        radio.sendValue("G", input.acceleration(Dimension.Z))
-        radio.sendValue("Te", input.temperature())
-        radio.sendValue("Rd", Math.round(imuRoll))
-        radio.sendValue("Pd", Math.round(imuPitch))
-    }
-
     /**
      * Calculate the drone's Roll, Pitch and Roll angles from raw data.
      */
@@ -448,18 +440,6 @@ namespace airbit {
         motorC = Math.constrain(motorC, 0, 255)
         motorD = Math.constrain(motorD, 0, 255)
     }
-
-
-    /**
-     * Frame rate of pid loop
-     */
-    //% block
-
-    export function fps() {
-
-        return Math.round(1000 / looptime)
-    }
-
 
 
     export function readMotorControllerMode() {
