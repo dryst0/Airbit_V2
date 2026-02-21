@@ -250,23 +250,22 @@ namespace airbit {
     //% block="Start Gyro/Acc"
     //% group='Control'
 
-    export function IMU_Start() {
-        // Full reset chip (H_RESET, internal 20MHz clock)
+    function writeImuRegister(register: number, value: number) {
         pins.i2cWriteNumber(
             IMU_ADDRESS,
-            IMU_PWR_MGMT_1 << 8 | 0x80,
+            register << 8 | value,
             NumberFormat.UInt16BE,
             false
         )
+    }
+
+    export function IMU_Start() {
+        // Full reset chip (H_RESET, internal 20MHz clock)
+        writeImuRegister(IMU_PWR_MGMT_1, 0x80)
         basic.pause(500)
-        pins.i2cWriteNumber(
-            IMU_ADDRESS,
-            IMU_WHO_AM_I,
-            NumberFormat.UInt8BE,
-            true
-        )
+        // Read WHO_AM_I register to verify chip is present
+        pins.i2cWriteNumber(IMU_ADDRESS, IMU_WHO_AM_I, NumberFormat.UInt8BE, true)
         gyroReturnId = pins.i2cReadNumber(IMU_ADDRESS, NumberFormat.Int16BE, false)
-        // basic.showNumber(IMU_Return >> 8)
         basic.clearScreen()
         if (gyroReturnId >> 8 > 0) {
             basic.showString("G")
@@ -275,40 +274,11 @@ namespace airbit {
             basic.showString("NG", 50)
             gyroExists = false
         }
-        // set clock to internal PLL
-        pins.i2cWriteNumber(
-            IMU_ADDRESS,
-            IMU_PWR_MGMT_1 << 8 | 0x01,
-            NumberFormat.UInt16BE,
-            false
-        )
-        pins.i2cWriteNumber(
-            IMU_ADDRESS,
-            IMU_SIGNAL_PATH_RESET << 8 | 0x07,
-            NumberFormat.UInt16BE,
-            false
-        )
-        // Disable FIFO
-        pins.i2cWriteNumber(
-            IMU_ADDRESS,
-            IMU_USER_CTRL << 8 | 0x00,
-            NumberFormat.UInt16BE,
-            false
-        )
-        // Gyro filter setting to 0 (250 Hz), 1 (176 Hz),  2 (92 Hz), 3 (41 Hz)
-        pins.i2cWriteNumber(
-            IMU_ADDRESS,
-            IMU_REG_CONFIG << 8 | 0,
-            NumberFormat.UInt16BE,
-            false
-        )
-        // Acc filter setting to 3 (44.8 Hz), 4 (21,2 Hz), 5 (10.2 Hz)
-        pins.i2cWriteNumber(
-            IMU_ADDRESS,
-            IMU_ACCEL_CONFIG_2 << 8 | 5,
-            NumberFormat.UInt16BE,
-            false
-        )
+        writeImuRegister(IMU_PWR_MGMT_1, 0x01)           // Set clock to internal PLL
+        writeImuRegister(IMU_SIGNAL_PATH_RESET, 0x07)     // Reset signal paths
+        writeImuRegister(IMU_USER_CTRL, 0x00)             // Disable FIFO
+        writeImuRegister(IMU_REG_CONFIG, 0)               // Gyro filter: 250 Hz
+        writeImuRegister(IMU_ACCEL_CONFIG_2, 5)           // Acc filter: 10.2 Hz
     }
 
 

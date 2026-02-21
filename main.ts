@@ -49,117 +49,109 @@ function JoystickDeadBand () {
         pitch = 0
     }
 }
+function isCharging (): boolean {
+    return pins.analogReadPin(AnalogPin.P0) > CHARGING_THRESHOLD
+}
+function showChargingAnimation () {
+    if (pins.analogReadPin(AnalogPin.P0) > CHARGING_COMPLETE_THRESHOLD) {
+        basic.showIcon(IconNames.Yes)
+        basic.showString("Charging finished!")
+    } else {
+        basic.showLeds(`
+            . . # . .
+            . # # # .
+            . # . # .
+            . # . # .
+            . # # # .
+            `)
+        basic.showLeds(`
+            . . # . .
+            . # # # .
+            . # . # .
+            . # # # .
+            . # # # .
+            `)
+        basic.showLeds(`
+            . . # . .
+            . # # # .
+            . # # # .
+            . # # # .
+            . # # # .
+            `)
+    }
+}
+function showBatteryBar () {
+    led.plotBarGraph(airbit.batteryLevel(), 100)
+}
+function showBatteryVoltage () {
+    basic.showNumber(airbit.batterymVolt())
+}
+function showAnalogReading () {
+    basic.showNumber(pins.analogReadPin(AnalogPin.P0))
+}
+function showThrottle () {
+    basic.showNumber(throttle)
+}
+function showMotorLeds () {
+    basic.clearScreen()
+    led.plotBrightness(0, 4, motorA)
+    led.plotBrightness(0, 0, motorB)
+    led.plotBrightness(4, 4, motorC)
+    led.plotBrightness(4, 0, motorD)
+    led.plot(Math.map(imuRoll, -ANGLE_LIMIT, ANGLE_LIMIT, 0, 4), Math.map(imuPitch, -ANGLE_LIMIT, ANGLE_LIMIT, 4, 0))
+}
 function screen () {
-    if (pins.analogReadPin(AnalogPin.P0) > CHARGING_THRESHOLD) {
-        if (pins.analogReadPin(AnalogPin.P0) > CHARGING_COMPLETE_THRESHOLD) {
-            basic.showIcon(IconNames.Yes)
-            basic.showString("Charging finished!")
+    if (isCharging()) {
+        showChargingAnimation()
+        return
+    }
+    switch (mode) {
+        case 0: dots(); break
+        case 1: showBatteryBar(); break
+        case 2: showBatteryVoltage(); break
+        case 3: showAnalogReading(); break
+        case 4: showThrottle(); break
+        case 5: motorTest(); break
+        case 6: showMotorLeds(); break
+    }
+}
+function checkStability () {
+    if (Math.abs(imuRoll) > FLIP_ANGLE_THRESHOLD && arm) {
+        stable = false
+    }
+}
+function updateMotors () {
+    if (arm && stable && mcExists && gyroExists) {
+        if (throttle == 0) {
+            airbit.MotorSpeed(MOTOR_IDLE_SPEED, MOTOR_IDLE_SPEED, MOTOR_IDLE_SPEED, MOTOR_IDLE_SPEED)
         } else {
-            basic.showLeds(`
-                . . # . .
-                . # # # .
-                . # . # .
-                . # . # .
-                . # # # .
-                `)
-            basic.showLeds(`
-                . . # . .
-                . # # # .
-                . # . # .
-                . # # # .
-                . # # # .
-                `)
-            basic.showLeds(`
-                . . # . .
-                . # # # .
-                . # # # .
-                . # # # .
-                . # # # .
-                `)
+            airbit.MotorSpeed(motorA, motorB, motorC, motorD)
         }
     } else {
-        if (mode == 0) {
-            dots()
-        }
-        if (mode == 1) {
-            led.plotBarGraph(
-            airbit.batteryLevel(),
-            100
-            )
-        }
-        if (mode == 2) {
-            basic.showNumber(airbit.batterymVolt())
-        }
-        if (mode == 3) {
-            basic.showNumber(pins.analogReadPin(AnalogPin.P0))
-        }
-        if (mode == 4) {
-            basic.showNumber(throttle)
-        }
-        if (mode == 5) {
-            motorTest()
-        }
-        if (mode == 6) {
-            basic.clearScreen()
-            motorLed()
+        airbit.cleanReg()
+        if (motorTesting) {
+            airbit.MotorSpeed(motorA, motorB, motorC, motorD)
+        } else {
+            airbit.MotorSpeed(0, 0, 0, 0)
         }
     }
 }
+function trackLoopTime () {
+    cpuTime = input.runningTime() - startTime
+    startTime = input.runningTime()
+}
 function mainLoop () {
     while (true) {
-        // Read raw data from gyro and accelerometer
         airbit.IMU_sensorRead()
-        // Find drone's absolute Roll, Pitch and Yaw angles with sensor fusion, gyro and accelerometer together.
         airbit.calculateAngles()
         basic.pause(1)
         lostSignalCheck()
-        if (motorTesting == false) {
-            // The "magic" algorithm that stabilises the drone based on setpoint angle and actual angle, finding the difference and chanring motor speed to compensate.
+        if (!motorTesting) {
             airbit.stabilisePid()
         }
-        // If upside down while armed, disable flying
-        if (Math.abs(imuRoll) > FLIP_ANGLE_THRESHOLD && arm) {
-            stable = false
-        }
-        // Only start motors if armed, stable, motor controller and gyro is operating
-        if (arm && stable && (mcExists && gyroExists)) {
-            if (throttle == 0) {
-                // Idle speed of motors
-                airbit.MotorSpeed(
-                MOTOR_IDLE_SPEED,
-                MOTOR_IDLE_SPEED,
-                MOTOR_IDLE_SPEED,
-                MOTOR_IDLE_SPEED
-                )
-            } else {
-                airbit.MotorSpeed(
-                motorA,
-                motorB,
-                motorC,
-                motorD
-                )
-            }
-        } else {
-            // Clear registers for error compensation algorithms, do not keep errors from past flight.
-            airbit.cleanReg()
-            if (motorTesting) {
-                airbit.MotorSpeed(
-                motorA,
-                motorB,
-                motorC,
-                motorD
-                )
-            } else {
-                airbit.MotorSpeed(
-                0,
-                0,
-                0,
-                0
-                )
-            }
-        }
-        cpuTime = input.runningTime() - startTime
-        startTime = input.runningTime()
+        checkStability()
+        updateMotors()
+        trackLoopTime()
     }
 }
 input.onButtonPressed(Button.A, function () {
@@ -192,36 +184,34 @@ input.onButtonPressed(Button.B, function () {
         mode = 0
     }
 })
-function motorLed () {
-    basic.clearScreen()
-    led.plotBrightness(0, 4, motorA)
-    led.plotBrightness(0, 0, motorB)
-    led.plotBrightness(4, 4, motorC)
-    led.plotBrightness(4, 0, motorD)
-    led.plot(Math.map(imuRoll, -ANGLE_LIMIT, ANGLE_LIMIT, 0, 4), Math.map(imuPitch, -ANGLE_LIMIT, ANGLE_LIMIT, 4, 0))
+function receivePitch (value: number) {
+    pitch = expo(value) / PITCH_SCALE
+    pitch = Math.constrain(pitch, -ANGLE_LIMIT, ANGLE_LIMIT)
+}
+function receiveRoll (value: number) {
+    roll = expo(value) / ROLL_SCALE
+    roll = Math.constrain(roll, -ANGLE_LIMIT, ANGLE_LIMIT)
+}
+function receiveThrottle (value: number) {
+    throttle = Math.constrain(value, 0, MAX_THROTTLE)
+    if (batterymVoltSmooth < LOW_BATTERY_VOLTAGE) {
+        throttle = Math.constrain(throttle, 0, LOW_BATTERY_THROTTLE)
+    }
+}
+function receiveArm (value: number) {
+    if (!arm && value) {
+        stable = true
+    }
+    arm = value
 }
 radio.onReceivedValue(function (name, value) {
     radioReceivedTime = input.runningTime()
-    if (name == "P") {
-        pitch = expo(value) / PITCH_SCALE
-        pitch = Math.constrain(pitch, -ANGLE_LIMIT, ANGLE_LIMIT)
-    }
-    if (name == "A") {
-        arm = value
-    }
-    if (name == "R") {
-        roll = expo(value) / ROLL_SCALE
-        roll = Math.constrain(roll, -ANGLE_LIMIT, ANGLE_LIMIT)
-    }
-    if (name == "T") {
-        throttle = value
-        throttle = Math.constrain(throttle, 0, MAX_THROTTLE)
-        if (batterymVoltSmooth < LOW_BATTERY_VOLTAGE) {
-            throttle = Math.constrain(throttle, 0, LOW_BATTERY_THROTTLE)
-        }
-    }
-    if (name == "Y") {
-        yaw += value * YAW_SCALE
+    switch (name) {
+        case "P": receivePitch(value); break
+        case "A": receiveArm(value); break
+        case "R": receiveRoll(value); break
+        case "T": receiveThrottle(value); break
+        case "Y": yaw += value * YAW_SCALE; break
     }
 })
 function dots () {
@@ -234,22 +224,21 @@ function dots () {
     airbit.smartBar(0, throttle)
     airbit.smartBar(4, airbit.batteryLevel())
 }
+function resetFlightInputs () {
+    roll = 0
+    pitch = 0
+    yaw = 0
+}
 function lostSignalCheck () {
-    // Failsafe makes only sense if already flying
-    if (throttle > FAILSAFE_THROTTLE && arm) {
-        if (input.runningTime() > radioReceivedTime + FAILSAFE_TIMEOUT_DESCEND) {
-            roll = 0
-            pitch = 0
-            yaw = 0
-            throttle = FAILSAFE_THROTTLE
-        }
-        if (input.runningTime() > radioReceivedTime + FAILSAFE_TIMEOUT_DISARM) {
-            roll = 0
-            pitch = 0
-            yaw = 0
-            throttle = 0
-            arm = 0
-        }
+    if (throttle <= FAILSAFE_THROTTLE || !arm) return
+    const timeSinceLastSignal = input.runningTime() - radioReceivedTime
+    if (timeSinceLastSignal > FAILSAFE_TIMEOUT_DISARM) {
+        resetFlightInputs()
+        throttle = 0
+        arm = 0
+    } else if (timeSinceLastSignal > FAILSAFE_TIMEOUT_DESCEND) {
+        resetFlightInputs()
+        throttle = FAILSAFE_THROTTLE
     }
 }
 function motorTest () {
