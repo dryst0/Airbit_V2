@@ -362,6 +362,18 @@ namespace airbit {
 
 
 
+    // Accumulate integral (I) term only when flying and error is small enough.
+    // This prevents the integral from winding up during ground handling or large maneuvers.
+    function accumulateIntegral() {
+        if (throttle <= INTEGRAL_THROTTLE_THRESHOLD) return
+        if (rollError > -INTEGRAL_RANGE && rollError < INTEGRAL_RANGE) {
+            rollIntegral += rollError
+        }
+        if (pitchError > -INTEGRAL_RANGE && pitchError < INTEGRAL_RANGE) {
+            pitchIntegral += pitchError
+        }
+    }
+
     // PID STABILIZATION — the brain of the drone!
     //
     // This function compares WHERE the pilot wants the drone to be (roll, pitch, yaw)
@@ -401,14 +413,7 @@ namespace airbit {
 
         // Step 3: I (Integral) — accumulate small persistent errors over time.
         // Only active when flying (throttle high enough) and error is small.
-        if (throttle > INTEGRAL_THROTTLE_THRESHOLD) {
-            if (rollError > -INTEGRAL_RANGE && rollError < INTEGRAL_RANGE) {
-                rollIntegral += rollError
-            }
-            if (pitchError > -INTEGRAL_RANGE && pitchError < INTEGRAL_RANGE) {
-                pitchIntegral += pitchError
-            }
-        }
+        accumulateIntegral()
 
         // Limit the integral correction so it doesn't overcorrect
         let rollIcorrection = Math.constrain(rollIntegral * rollPitchI, -INTEGRAL_LIMIT, INTEGRAL_LIMIT)

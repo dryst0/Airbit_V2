@@ -160,15 +160,18 @@ function checkStability () {
 }
 // Send the calculated motor speeds to the motor controller chip.
 // Only fly if: armed, stable, and both the gyroscope and motor controller are working.
+// When not ready to fly, reset stabilization and either pass through motor test speeds or stop
+function handleMotorsNotReady () {
+    airbit.resetPidState()
+    if (motorTesting) {
+        airbit.setMotorSpeeds(motorA, motorB, motorC, motorD)
+        return
+    }
+    airbit.setMotorSpeeds(0, 0, 0, 0)
+}
 function updateMotors () {
     if (!arm || !stable || !motorControllerExists || !gyroExists) {
-        airbit.resetPidState()
-        if (motorTesting) {
-            airbit.setMotorSpeeds(motorA, motorB, motorC, motorD)
-        }
-        if (!motorTesting) {
-            airbit.setMotorSpeeds(0, 0, 0, 0)
-        }
+        handleMotorsNotReady()
         return
     }
     if (throttle == 0) {
@@ -183,15 +186,18 @@ function trackLoopTime () {
 }
 // The main flight loop — this runs hundreds of times per second.
 // Each cycle: read sensors, calculate angles, stabilize, and update motors.
+// Only run PID stabilization when not in motor test mode
+function stabilizeIfFlying () {
+    if (motorTesting) return
+    airbit.stabilize()
+}
 function mainLoop () {
     while (true) {
         airbit.readImuSensors()
         airbit.calculateAngles()
         basic.pause(1)
         lostSignalCheck()
-        if (!motorTesting) {
-            airbit.stabilize()
-        }
+        stabilizeIfFlying()
         checkStability()
         updateMotors()
         trackLoopTime()
