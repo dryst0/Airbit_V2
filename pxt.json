@@ -8,7 +8,6 @@
         "microbit-pxt-i2cpins": "github:bsiever/microbit-pxt-i2cpins#v0.0.6"
     },
     "files": [
-        "main.blocks",
         "main.ts",
         "README.md",
         "custom.ts"
@@ -27,5 +26,5 @@
     "supportedTargets": [
         "microbit"
     ],
-    "preferredEditor": "blocksprj"
+    "preferredEditor": "tsprj"
 }

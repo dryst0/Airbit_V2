@@ -1,0 +1,30 @@
+{
+  "name": "airbit_v2",
+  "version": "1.0.0",
+  "description": "> Open this page at [https://gomakekit.github.io/airbit_v2/](https://gomakekit.github.io/airbit_v2/)",
+  "main": "index.js",
+  "scripts": {
+    "build": "pxt build",
+    "clean": "pxt clean",
+    "serve": "pxt serve",
+    "test": "pxt test",
+    "deploy": "pxt deploy"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gomakekit/Airbit_V2.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/gomakekit/Airbit_V2/issues"
+  },
+  "homepage": "https://github.com/gomakekit/Airbit_V2#readme",
+  "devDependencies": {
+    "makecode": "^1.3.5",
+    "pxt": "^0.5.1",
+    "pxt-microbit": "^8.1.6"
+  }
+}
